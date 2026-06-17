@@ -315,6 +315,81 @@ export default function Prompt() {
     }
   };
 
+  const showPrompt = (message, defaultValue = '') => {
+    return new Promise((resolve) => {
+      if (typeof document === 'undefined') return resolve(null);
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.inset = '0';
+      overlay.style.background = 'rgba(0,0,0,0.5)';
+      overlay.style.display = 'flex';
+      overlay.style.alignItems = 'center';
+      overlay.style.justifyContent = 'center';
+      overlay.style.zIndex = '9999';
+
+      const box = document.createElement('div');
+      box.style.background = '#fff';
+      box.style.color = '#000';
+      box.style.padding = '16px';
+      box.style.borderRadius = '8px';
+      box.style.minWidth = '300px';
+      box.style.maxWidth = '90%';
+      box.style.boxShadow = '0 10px 30px rgba(0,0,0,0.2)';
+
+      const label = document.createElement('div');
+      label.style.marginBottom = '8px';
+      label.textContent = message;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = defaultValue || '';
+      input.style.width = '100%';
+      input.style.padding = '8px';
+      input.style.marginBottom = '8px';
+
+      const actions = document.createElement('div');
+      actions.style.display = 'flex';
+      actions.style.justifyContent = 'flex-end';
+      actions.style.gap = '8px';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.padding = '6px 10px';
+
+      const okBtn = document.createElement('button');
+      okBtn.textContent = 'OK';
+      okBtn.style.padding = '6px 10px';
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(okBtn);
+      box.appendChild(label);
+      box.appendChild(input);
+      box.appendChild(actions);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+
+      input.select();
+
+      const cleanup = (value) => {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        resolve(value);
+      };
+
+      cancelBtn.addEventListener('click', () => cleanup(null));
+      okBtn.addEventListener('click', () => cleanup(input.value));
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          cleanup(input.value);
+        }
+        if (ev.key === 'Escape') {
+          ev.preventDefault();
+          cleanup(null);
+        }
+      });
+    });
+  };
+
   const createNewSession = async () => {
     try {
       setGlobalError('');
@@ -379,7 +454,7 @@ export default function Prompt() {
   const renameSession = async (session, e) => {
     e.stopPropagation();
     const currentTitle = session.title || 'Untitled chat';
-    const nextTitle = prompt('Rename this chat:', currentTitle);
+    const nextTitle = await showPrompt('Rename this chat:', currentTitle);
     if (!nextTitle) return;
 
     const trimmedTitle = nextTitle.trim();
