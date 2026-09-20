@@ -189,6 +189,7 @@ export default function Prompt() {
   const [voiceSupported, setVoiceSupported] = useState(true);
   const [messageActionBusy, setMessageActionBusy] = useState('');
   const [copiedMessageIndex, setCopiedMessageIndex] = useState(null);
+  const [contextPrompts, setContextPrompts] = useState([]);
 
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
@@ -318,6 +319,7 @@ export default function Prompt() {
         setSessions([]);
         setCurrentSession(null);
         setMessages([]);
+        setContextPrompts([]);
         sessionsRef.current = [];
         loadedUserIdRef.current = null;
         setGlobalError('');
@@ -351,6 +353,7 @@ export default function Prompt() {
   const loadMessages = async (sessionId) => {
     try {
       setGlobalError('');
+      setContextPrompts([]);
       const headers = await getAuthHeaders();
       const res = await fetch(`/api/chat/messages?sessionId=${sessionId}`, { headers });
       const data = await res.json();
@@ -471,6 +474,7 @@ export default function Prompt() {
         setSessions((prev) => [data.session, ...prev]);
         setCurrentSession(data.session);
         setMessages([]);
+        setContextPrompts([]);
         return data.session;
       }
     } catch (error) {
@@ -503,6 +507,7 @@ export default function Prompt() {
         if (currentSession?.id === sessionId) {
           setCurrentSession(null);
           setMessages([]);
+          setContextPrompts([]);
         }
       }
     } catch (error) {
@@ -860,6 +865,11 @@ export default function Prompt() {
       }
 
       const aiText = data.response?.trim() || 'No response received';
+      const nextContextPrompts = Array.isArray(data.suggestions)
+        ? data.suggestions.filter((item) => item?.label && item?.text).slice(0, 6)
+        : [];
+      setContextPrompts(nextContextPrompts);
+
       const localAssistantKey = `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       setMessages((prev) => [
         ...prev,
@@ -1083,6 +1093,11 @@ export default function Prompt() {
         throw new Error('EduGuide returned an empty response.');
       }
 
+      const nextContextPrompts = Array.isArray(payload.suggestions)
+        ? payload.suggestions.filter((item) => item?.label && item?.text).slice(0, 6)
+        : [];
+      setContextPrompts(nextContextPrompts);
+
       let regeneratedMessageId = assistantMessage.id || null;
 
       if (user && assistantMessage.id) {
@@ -1134,6 +1149,10 @@ export default function Prompt() {
     { icon: 'resume', label: 'Resume Help', text: 'Can you help me write a professional resume for a software engineering role?' },
     { icon: 'scholarship', label: 'Scholarship Tips', text: 'How can I find and apply for scholarships effectively?' },
   ];
+
+  const displayedPrompts = contextPrompts.length > 0 ? contextPrompts : quickPrompts;
+  const promptGroupLabel =
+    contextPrompts.length > 0 ? 'Suggested next steps' : 'Quick topics';
 
   const PromptIcon = ({ icon }) => {
     if (icon === 'study') {
@@ -1842,8 +1861,22 @@ export default function Prompt() {
                 }`}>
                   Quiz help mode: EduGuide gives hints and reasoning for assessment-style questions instead of revealing final answers.
                 </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                    isLight ? 'text-violet-600/75' : 'text-violet-200/65'
+                  }`}>
+                    {promptGroupLabel}
+                  </p>
+                  {contextPrompts.length > 0 && (
+                    <span className={`text-[10px] ${
+                      isLight ? 'text-slate-400' : 'text-violet-100/40'
+                    }`}>
+                      Based on this chat
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {quickPrompts.map((btn, i) => (
+                  {displayedPrompts.map((btn, i) => (
                     <button
                       key={i}
                       onClick={() => sendMessage(btn.text)}
@@ -2416,8 +2449,24 @@ export default function Prompt() {
                 }`}>
                   Quiz help mode: EduGuide gives hints and reasoning for assessment-style questions instead of revealing final answers.
                 </p>
-                <div className="grid w-full min-w-0 grid-cols-2 gap-1.5 sm:gap-2 xl:grid-cols-6">
-                  {quickPrompts.map((btn, i) => (
+                <div className="flex items-center justify-between gap-3">
+                  <p className={`text-[10px] font-semibold uppercase tracking-[0.14em] sm:text-[11px] ${
+                    isLight ? 'text-violet-600/75' : 'text-violet-200/65'
+                  }`}>
+                    {promptGroupLabel}
+                  </p>
+                  {contextPrompts.length > 0 && (
+                    <span className={`text-[10px] sm:text-[11px] ${
+                      isLight ? 'text-slate-400' : 'text-violet-100/40'
+                    }`}>
+                      Based on this chat
+                    </span>
+                  )}
+                </div>
+                <div className={`grid w-full min-w-0 grid-cols-2 gap-1.5 sm:gap-2 ${
+                  contextPrompts.length > 0 ? 'xl:grid-cols-5' : 'xl:grid-cols-6'
+                }`}>
+                  {displayedPrompts.map((btn, i) => (
                     <button
                       key={i}
                       onClick={() => sendMessage(btn.text)}
