@@ -22,12 +22,19 @@ export default function Login() {
     const destinationForUser = async (userId) => {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role, account_type')
+        .select('role, account_type, section_onboarding_complete')
         .eq('id', userId)
         .maybeSingle();
 
       if (profile?.account_type === 'teacher' && profile?.role !== 'teacher') {
         return '/teacher-verification';
+      }
+
+      if (
+        profile?.account_type === 'student' &&
+        !profile?.section_onboarding_complete
+      ) {
+        return '/student-setup';
       }
 
       return '/prompt';
@@ -95,12 +102,17 @@ export default function Login() {
       if (data.user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role, account_type')
+          .select('role, account_type, section_onboarding_complete')
           .eq('id', data.user.id)
           .maybeSingle();
 
         if (profile?.account_type === 'teacher' && profile?.role !== 'teacher') {
           router.replace('/teacher-verification');
+        } else if (
+          profile?.account_type === 'student' &&
+          !profile?.section_onboarding_complete
+        ) {
+          router.replace('/student-setup');
         } else {
           router.replace('/prompt');
         }
