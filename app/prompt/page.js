@@ -1367,6 +1367,18 @@ export default function Prompt() {
                 <span>{isLight ? 'Night' : 'Light'}</span>
               </span>
             </button>
+            {user && accountType === 'student' && (
+              <Link
+                href="/student-setup"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    : 'border-blue-300/30 bg-blue-900/20 text-blue-100 hover:bg-blue-900/35'
+                }`}
+              >
+                My section
+              </Link>
+            )}
             {user && accountType === 'teacher' && userRole !== 'teacher' && (
               <Link
                 href="/teacher-verification"
@@ -1379,6 +1391,45 @@ export default function Prompt() {
                 Verify teacher
               </Link>
             )}
+            {user && ['teacher', 'guidance', 'admin'].includes(userRole) && (
+              <Link
+                href="/dashboard"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-violet-300 bg-white text-violet-700 hover:bg-violet-100'
+                    : 'border-violet-300/30 bg-violet-900/35 text-violet-100 hover:border-violet-300/50 hover:bg-violet-900/55'
+                }`}
+              >
+                Dashboard
+              </Link>
+            )}
+
+            {user && accountType === 'student' && (
+              <Link
+                href="/student-setup"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    : 'border-blue-300/30 bg-blue-900/20 text-blue-100 hover:bg-blue-900/35'
+                }`}
+              >
+                My section
+              </Link>
+            )}
+
+            {user && accountType === 'teacher' && userRole !== 'teacher' && (
+              <Link
+                href="/teacher-verification"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    : 'border-amber-300/30 bg-amber-900/20 text-amber-100 hover:bg-amber-900/35'
+                }`}
+              >
+                Verify teacher
+              </Link>
+            )}
+
             {user && ['teacher', 'guidance', 'admin'].includes(userRole) && (
               <Link
                 href="/dashboard"
