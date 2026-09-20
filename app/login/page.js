@@ -19,6 +19,20 @@ export default function Login() {
   useEffect(() => {
     let cancelled = false;
 
+    const destinationForUser = async (userId) => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, account_type')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (profile?.account_type === 'teacher' && profile?.role !== 'teacher') {
+        return '/teacher-verification';
+      }
+
+      return '/prompt';
+    };
+
     const checkSession = async () => {
       const {
         data: { session },
@@ -27,7 +41,7 @@ export default function Login() {
       if (cancelled) return;
 
       if (session?.user) {
-        router.replace('/prompt');
+        router.replace(await destinationForUser(session.user.id));
         return;
       }
 
@@ -40,7 +54,9 @@ export default function Login() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user && event !== 'SIGNED_OUT') {
-        router.replace('/prompt');
+        void destinationForUser(session.user.id).then((destination) => {
+          if (!cancelled) router.replace(destination);
+        });
         return;
       }
 
@@ -77,7 +93,17 @@ export default function Login() {
       if (signInError) throw signInError;
 
       if (data.user) {
-        router.replace('/prompt');
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, account_type')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (profile?.account_type === 'teacher' && profile?.role !== 'teacher') {
+          router.replace('/teacher-verification');
+        } else {
+          router.replace('/prompt');
+        }
       }
     } catch (submitError) {
       setError(submitError.message);
