@@ -273,4 +273,146 @@ $$;
 revoke execute on function public.admin_set_teacher_section(uuid, uuid, boolean) from public, anon;
 grant execute on function public.admin_set_teacher_section(uuid, uuid, boolean) to authenticated;
 
+create or replace function public.admin_section_management()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  result jsonb;
+begin
+  if not public.eduguide_is_current_user_admin() then
+    raise exception 'Admin access is required' using errcode = '42501';
+  end if;
+
+  select jsonb_build_object(
+    'sections',
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', s.id,
+            'schoolId', s.school_id,
+            'schoolName', sc.name,
+            'name', s.name,
+            'gradeYear', s.grade_year,
+            'active', s.active,
+            'teachers', coalesce(
+              (
+                select jsonb_agg(
+                  jsonb_build_object(
+                    'id', p.id,
+                    'name', nullif(trim(concat_ws(' ', p.first_name, p.last_name)), ''),
+                    'email', p.email,
+                    'courses', coalesce(
+                      (
+                        select jsonb_agg(
+                          jsonb_build_object('id', c.id, 'name', c.name)
+                          order by c.name
+                        )
+                        from public.teacher_course_assignments tca
+                        join public.courses c on c.id = tca.course_id
+                        where tca.teacher_id = p.id
+                          and c.active = true
+                      ),
+                      '[]'::jsonb
+                    )
+                  )
+                  order by p.last_name nulls last, p.first_name nulls last
+                )
+                from public.teacher_section_assignments tsa
+                join public.profiles p on p.id = tsa.teacher_id
+                where tsa.section_id = s.id
+              ),
+              '[]'::jsonb
+            ),
+            'studentCount', (
+              select count(*)
+              from public.profiles sp
+              where sp.section_id = s.id
+                and sp.account_type = 'student'
+            )
+          )
+          order by sc.name, s.grade_year nulls last, s.name
+        )
+        from public.sections s
+        join public.schools sc on sc.id = s.school_id
+        where s.active = true
+      ),
+      '[]'::jsonb
+    ),
+    'teachers',
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', p.id,
+            'name', nullif(trim(concat_ws(' ', p.first_name, p.last_name)), ''),
+            'email', p.email,
+            'schoolId', p.school_id,
+            'courses', coalesce(
+              (
+                select jsonb_agg(
+                  jsonb_build_object('id', c.id, 'name', c.name)
+                  order by c.name
+                )
+                from public.teacher_course_assignments tca
+                join public.courses c on c.id = tca.course_id
+                where tca.teacher_id = p.id
+                  and c.active = true
+              ),
+              '[]'::jsonb
+            )
+          )
+          order by p.last_name nulls last, p.first_name nulls last
+        )
+        from public.profiles p
+        where p.role = 'teacher'
+      ),
+      '[]'::jsonb
+    ),
+    'courses',
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', c.id,
+            'schoolId', c.school_id,
+            'name', c.name
+          )
+          order by c.name
+        )
+        from public.courses c
+        where c.active = true
+      ),
+      '[]'::jsonb
+    ),
+    'schools',
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', s.id,
+            'name', s.name,
+            'shortName', s.short_name,
+            'adminEmail', s.admin_email
+          )
+          order by s.name
+        )
+        from public.schools s
+        where s.active = true
+      ),
+      '[]'::jsonb
+    )
+  )
+  into result;
+
+  return result;
+end;
+$;
+
+revoke execute on function public.admin_section_management() from public, anon;
+grant execute on function public.admin_section_management() to authenticated;
+
 commit;
