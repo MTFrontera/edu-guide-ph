@@ -52,7 +52,7 @@ export async function GET(request) {
 
     const { data: messages, error } = await supabase
       .from('chat_messages')
-      .select('*')
+      .select('id, session_id, user_id, role, content, feedback, created_at')
       .eq('session_id', sessionId)
       .eq('user_id', user.id)
       .order('created_at', { ascending: true });
@@ -130,6 +130,101 @@ export async function POST(request) {
     console.error('Save message error:', error);
     return Response.json(
       { error: error.message || 'Failed to save message' },
+      { status: 500 }
+    );
+  }
+}
+
+
+export async function PATCH(request) {
+  try {
+    const { user, supabase, error: authError } = await getAuthenticatedSupabase(request);
+    if (authError || !user || !supabase) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { messageId, content, feedback } = await request.json();
+
+    if (!messageId) {
+      return Response.json({ error: 'Message ID is required' }, { status: 400 });
+    }
+
+    const updates = {};
+    if (typeof content === 'string') {
+      const trimmed = content.trim();
+      if (!trimmed) {
+        return Response.json({ error: 'Message content cannot be empty' }, { status: 400 });
+      }
+      updates.content = trimmed;
+    }
+
+    if (feedback !== undefined) {
+      if (feedback !== null && !['like', 'dislike'].includes(feedback)) {
+        return Response.json({ error: 'Invalid feedback value' }, { status: 400 });
+      }
+      updates.feedback = feedback;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return Response.json({ error: 'Nothing to update' }, { status: 400 });
+    }
+
+    const { data: message, error } = await supabase
+      .from('chat_messages')
+      .update(updates)
+      .eq('id', messageId)
+      .eq('user_id', user.id)
+      .select('id, session_id, user_id, role, content, feedback, created_at')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!message) {
+      return Response.json({ error: 'Message not found' }, { status: 404 });
+    }
+
+    return Response.json({ message });
+  } catch (error) {
+    console.error('Update message error:', error);
+    return Response.json(
+      { error: error.message || 'Failed to update message' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request) {
+  try {
+    const { user, supabase, error: authError } = await getAuthenticatedSupabase(request);
+    if (authError || !user || !supabase) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { messageIds } = await request.json();
+    const ids = Array.isArray(messageIds)
+      ? [...new Set(messageIds.filter(Boolean))]
+      : [];
+
+    if (ids.length === 0) {
+      return Response.json({ error: 'At least one message ID is required' }, { status: 400 });
+    }
+
+    const { data: deleted, error } = await supabase
+      .from('chat_messages')
+      .delete()
+      .in('id', ids)
+      .eq('user_id', user.id)
+      .select('id');
+
+    if (error) throw error;
+
+    return Response.json({
+      success: true,
+      deletedIds: (deleted || []).map((item) => item.id),
+    });
+  } catch (error) {
+    console.error('Delete message error:', error);
+    return Response.json(
+      { error: error.message || 'Failed to delete message' },
       { status: 500 }
     );
   }
