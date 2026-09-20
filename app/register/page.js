@@ -155,7 +155,7 @@ export default function Register() {
         if (formData.accountType === 'teacher') {
           router.replace('/teacher-verification');
         } else {
-          router.replace('/prompt');
+          router.replace('/student-setup');
         }
         return;
       }
@@ -167,7 +167,7 @@ export default function Register() {
         );
       } else {
         setSuccessMessage(
-          'Student account created. Check your email for the verification link before signing in.'
+          'Student account created. Check your email for the verification link. After signing in, EduGuide will ask you to choose your section.'
         );
       }
     } catch (submitError) {
