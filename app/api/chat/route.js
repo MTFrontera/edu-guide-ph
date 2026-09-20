@@ -375,7 +375,12 @@ Return ONLY valid JSON in this exact shape:
 
 export async function POST(request) {
   try {
-    const { message, attachments = [], history = [] } = await request.json();
+    const {
+      message,
+      attachments = [],
+      history = [],
+      suggestionsOnly = false,
+    } = await request.json();
 
     const cleanMessage = String(message || '').trim();
     if (!cleanMessage && !Array.isArray(attachments)) {
@@ -391,6 +396,49 @@ export async function POST(request) {
     }
 
     const model = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+
+    if (suggestionsOnly) {
+      const recentHistory = Array.isArray(history) ? history.slice(-12) : [];
+      const latestAssistant = [...recentHistory]
+        .reverse()
+        .find((item) => item?.role === 'assistant');
+      const latestUser = [...recentHistory]
+        .reverse()
+        .find((item) => item?.role === 'user');
+
+      if (!latestAssistant?.text && !latestAssistant?.content) {
+        return Response.json({ suggestions: [] });
+      }
+
+      const latestUserText = String(
+        latestUser?.text || latestUser?.content || ''
+      ).trim();
+      const latestAssistantText = String(
+        latestAssistant?.text || latestAssistant?.content || ''
+      ).trim();
+
+      const assessmentMode = looksLikeAssessmentRequest(
+        latestUserText,
+        [],
+        []
+      );
+
+      const generatedSuggestions = await generateFollowUpSuggestions({
+        apiKey,
+        model,
+        history: recentHistory,
+        userMessage: latestUserText,
+        assistantResponse: latestAssistantText,
+        assessmentMode,
+      });
+
+      return Response.json({
+        suggestions:
+          generatedSuggestions.length > 0
+            ? generatedSuggestions
+            : buildFallbackSuggestions(assessmentMode),
+      });
+    }
 
     const textAttachments = Array.isArray(attachments)
       ? attachments.filter((a) => a?.type === 'text' && a?.content)
