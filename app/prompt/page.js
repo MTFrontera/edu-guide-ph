@@ -1753,6 +1753,11 @@ export default function Prompt() {
                   </div>
                 )}
 
+                <p className={`text-[11px] leading-5 ${
+                  isLight ? 'text-slate-500' : 'text-violet-100/55'
+                }`}>
+                  Quiz help mode: EduGuide gives hints and reasoning for assessment-style questions instead of revealing final answers.
+                </p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {quickPrompts.map((btn, i) => (
                     <button
@@ -2321,6 +2326,11 @@ export default function Prompt() {
                   </div>
                 )}
 
+                <p className={`text-[11px] leading-5 sm:text-xs ${
+                  isLight ? 'text-slate-500' : 'text-violet-100/55'
+                }`}>
+                  Quiz help mode: EduGuide gives hints and reasoning for assessment-style questions instead of revealing final answers.
+                </p>
                 <div className="grid w-full min-w-0 grid-cols-2 gap-1.5 sm:gap-2 xl:grid-cols-6">
                   {quickPrompts.map((btn, i) => (
                     <button
