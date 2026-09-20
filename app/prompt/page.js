@@ -233,18 +233,23 @@ export default function Prompt() {
   }, []);
 
   useEffect(() => {
+    const loadUserRole = async (userId) => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+
+      setUserRole(profile?.role || 'student');
+    };
+
     const loadUser = async () => {
       const {
         data: { user: activeUser },
       } = await supabase.auth.getUser();
       setUser(activeUser);
       if (activeUser) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', activeUser.id)
-          .maybeSingle();
-        setUserRole(profile?.role || 'student');
+        await loadUserRole(activeUser.id);
         loadSessions(activeUser.id);
       } else {
         setUserRole('student');
@@ -259,12 +264,7 @@ export default function Prompt() {
       if (session?.user) {
         setUser(session.user);
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .maybeSingle();
-          setUserRole(profile?.role || 'student');
+          void loadUserRole(session.user.id);
           loadSessions(session.user.id, { force: true });
         }
         return;
