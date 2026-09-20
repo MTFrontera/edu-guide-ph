@@ -855,6 +855,7 @@ export default function Prompt() {
           history: messages.slice(-12).map((item) => ({
             role: item.role,
             text: item.text,
+            feedback: item.feedback || null,
           })),
         }),
       });
@@ -1079,6 +1080,7 @@ export default function Prompt() {
           history: messages.slice(0, promptIndex).slice(-12).map((item) => ({
             role: item.role,
             text: item.text,
+            feedback: item.feedback || null,
           })),
         }),
       });
@@ -1330,7 +1332,7 @@ export default function Prompt() {
                 : 'bg-violet-500/15 text-violet-100'
               : ''
           } disabled:cursor-not-allowed disabled:opacity-50`}
-          title="Helpful response"
+          title="Helpful — future replies in this chat will lean toward what worked here"
           aria-pressed={message.feedback === 'like'}
         >
           <ThumbsUpIcon className="h-3.5 w-3.5" />
@@ -1346,7 +1348,7 @@ export default function Prompt() {
                 : 'bg-violet-500/15 text-violet-100'
               : ''
           } disabled:cursor-not-allowed disabled:opacity-50`}
-          title="Unhelpful response"
+          title="Not helpful — future replies in this chat will try a different approach"
           aria-pressed={message.feedback === 'dislike'}
         >
           <ThumbsDownIcon className="h-3.5 w-3.5" />
