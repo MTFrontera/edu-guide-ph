@@ -681,6 +681,10 @@ For authenticated users:
 - regenerated assistant content updates the saved message;
 - delete operations remove the corresponding saved rows.
 
+Like/dislike is not cosmetic. Recent rated assistant replies are sent back to EduGuide as soft response-preference signals for later replies in the same chat. Liked replies encourage similar clarity/structure/detail when appropriate; disliked replies encourage a meaningfully different explanation approach. Feedback never overrides factual accuracy, privacy, or assessment-help rules.
+
+Quick-topic buttons are also context-aware after a conversation begins. Gemini generates follow-up suggestions from the newest topic, and deterministic topic-follow-up fallbacks are used if suggestion generation fails. Reopened saved chats regenerate contextual suggestions from their recent history.
+
 Guest actions are local only.
 
 Relevant migration reference:
