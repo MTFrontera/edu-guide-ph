@@ -19,6 +19,7 @@ export default function Register() {
     lastName: '',
     age: '',
     gender: '',
+    phoneNumber: '',
     gradeYear: '',
     studentId: '',
     employeeId: '',
@@ -126,6 +127,15 @@ export default function Register() {
         throw new Error('Please select your school.');
       }
 
+      if (!formData.phoneNumber.trim()) {
+        throw new Error('Please enter your contact number.');
+      }
+
+      const normalizedPhone = formData.phoneNumber.trim();
+      if (!/^[+0-9()\-\s]{7,30}$/.test(normalizedPhone)) {
+        throw new Error('Please enter a valid contact number.');
+      }
+
       if (formData.accountType === 'student' && !formData.gradeYear.trim()) {
         throw new Error('Please enter your grade or year level.');
       }
@@ -143,6 +153,7 @@ export default function Register() {
         last_name: formData.lastName.trim(),
         age: formData.age ? parseInt(formData.age, 10) : null,
         gender: formData.gender || null,
+        phone_number: formData.phoneNumber.trim(),
         grade_year:
           formData.accountType === 'student' ? formData.gradeYear.trim() : null,
         account_type: formData.accountType,
@@ -419,9 +430,7 @@ export default function Register() {
               </div>
             </div>
 
-            <div className={`grid gap-3 ${
-              formData.accountType === 'student' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
-            }`}>
+            <div className="grid gap-3 sm:grid-cols-3">
               <div>
                 <label htmlFor="age" className="mb-2 block text-sm font-medium text-violet-100/80">
                   Age
@@ -455,6 +464,22 @@ export default function Register() {
                   <option value="female">Female</option>
                   <option value="other">Other</option>
                 </select>
+              </div>
+
+              <div>
+                <label htmlFor="phoneNumber" className="mb-2 block text-sm font-medium text-violet-100/80">
+                  Contact number
+                </label>
+                <input
+                  id="phoneNumber"
+                  type="tel"
+                  name="phoneNumber"
+                  placeholder="+63 9XX XXX XXXX"
+                  value={formData.phoneNumber}
+                  onChange={handleInputChange}
+                  className={fieldClass}
+                  required
+                />
               </div>
 
               {formData.accountType === 'student' && (
