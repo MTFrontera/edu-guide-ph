@@ -26,7 +26,11 @@ export default function Login() {
         .eq('id', userId)
         .maybeSingle();
 
-      if (profile?.account_type === 'teacher' && profile?.role !== 'teacher') {
+      if (['admin', 'guidance', 'teacher'].includes(profile?.role)) {
+        return '/dashboard';
+      }
+
+      if (profile?.account_type === 'teacher') {
         return '/teacher-verification';
       }
 
@@ -106,7 +110,9 @@ export default function Login() {
           .eq('id', data.user.id)
           .maybeSingle();
 
-        if (profile?.account_type === 'teacher' && profile?.role !== 'teacher') {
+        if (['admin', 'guidance', 'teacher'].includes(profile?.role)) {
+          router.replace('/dashboard');
+        } else if (profile?.account_type === 'teacher') {
           router.replace('/teacher-verification');
         } else if (
           profile?.account_type === 'student' &&
