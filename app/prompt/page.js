@@ -775,7 +775,14 @@ export default function Prompt() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: outboundMessage, attachments: pendingAttachments }),
+        body: JSON.stringify({
+          message: outboundMessage,
+          attachments: pendingAttachments,
+          history: messages.slice(-12).map((item) => ({
+            role: item.role,
+            text: item.text,
+          })),
+        }),
       });
 
       const data = await res.json();
