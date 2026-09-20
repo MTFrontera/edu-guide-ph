@@ -78,6 +78,12 @@ create index if not exists teacher_verification_reviewed_by_idx
 alter table public.schools enable row level security;
 alter table public.teacher_verification_requests enable row level security;
 
+revoke all on table public.schools from anon, authenticated;
+grant select on table public.schools to anon, authenticated;
+
+revoke all on table public.teacher_verification_requests from anon, authenticated;
+grant select on table public.teacher_verification_requests to authenticated;
+
 drop policy if exists "Anyone can view active schools" on public.schools;
 create policy "Anyone can view active schools"
 on public.schools
@@ -85,27 +91,24 @@ for select
 to anon, authenticated
 using (active = true);
 
-create or replace function public.eduguide_is_admin(
-  check_user_id uuid default auth.uid()
-)
+create or replace function public.eduguide_is_current_user_admin()
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = ''
-as $$
+as $
   select coalesce(
     (
       select p.role = 'admin'
       from public.profiles p
-      where p.id = check_user_id
+      where p.id = (select auth.uid())
     ),
     false
   );
-$$;
+$;
 
-revoke execute on function public.eduguide_is_admin(uuid) from public, anon;
-grant execute on function public.eduguide_is_admin(uuid) to authenticated;
+grant execute on function public.eduguide_is_current_user_admin() to authenticated;
 
 drop policy if exists "Users can view own teacher verification" on public.teacher_verification_requests;
 create policy "Users can view own teacher verification"
@@ -114,7 +117,7 @@ for select
 to authenticated
 using (
   (select auth.uid()) = user_id
-  or public.eduguide_is_admin((select auth.uid()))
+  or public.eduguide_is_current_user_admin()
 );
 
 -- Signup metadata may request a teacher account, but can never self-assign
@@ -297,7 +300,7 @@ security definer
 set search_path = ''
 as $$
 begin
-  if not public.eduguide_is_admin(auth.uid()) then
+  if not public.eduguide_is_current_user_admin() then
     raise exception 'Admin access is required' using errcode = '42501';
   end if;
 
@@ -342,7 +345,7 @@ as $$
 declare
   req public.teacher_verification_requests%rowtype;
 begin
-  if not public.eduguide_is_admin(auth.uid()) then
+  if not public.eduguide_is_current_user_admin() then
     raise exception 'Admin access is required' using errcode = '42501';
   end if;
 
@@ -439,7 +442,7 @@ using (
   bucket_id = 'teacher-verifications'
   and (
     (storage.foldername(name))[1] = auth.uid()::text
-    or public.eduguide_is_admin(auth.uid())
+    or public.eduguide_is_current_user_admin()
   )
 );
 
