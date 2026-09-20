@@ -20,6 +20,8 @@ export default function Register() {
     age: '',
     gender: '',
     gradeYear: '',
+    studentId: '',
+    employeeId: '',
     schoolId: '',
     accountType: 'student',
   });
@@ -106,6 +108,8 @@ export default function Register() {
       ...prev,
       accountType,
       gradeYear: accountType === 'teacher' ? '' : prev.gradeYear,
+      studentId: accountType === 'teacher' ? '' : prev.studentId,
+      employeeId: accountType === 'student' ? '' : prev.employeeId,
     }));
   };
 
@@ -126,6 +130,14 @@ export default function Register() {
         throw new Error('Please enter your grade or year level.');
       }
 
+      if (formData.accountType === 'student' && !formData.studentId.trim()) {
+        throw new Error('Please enter your student ID.');
+      }
+
+      if (formData.accountType === 'teacher' && !formData.employeeId.trim()) {
+        throw new Error('Please enter your teacher or employee ID.');
+      }
+
       const profileMetadata = {
         first_name: formData.firstName.trim(),
         last_name: formData.lastName.trim(),
@@ -135,6 +147,10 @@ export default function Register() {
           formData.accountType === 'student' ? formData.gradeYear.trim() : null,
         account_type: formData.accountType,
         school_id: formData.schoolId,
+        student_id:
+          formData.accountType === 'student' ? formData.studentId.trim() : null,
+        employee_id:
+          formData.accountType === 'teacher' ? formData.employeeId.trim() : null,
       };
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -163,7 +179,7 @@ export default function Register() {
       setSuccess(true);
       if (formData.accountType === 'teacher') {
         setSuccessMessage(
-          'Teacher account created. Verify your email, sign in, then upload your school ID or employment proof for admin approval.'
+          'Teacher account created. After email confirmation, sign in and upload your school ID or employment proof. The teacher-role verification request is then sent to your school administrator for approval.'
         );
       } else {
         setSuccessMessage(
@@ -460,11 +476,43 @@ export default function Register() {
               )}
             </div>
 
+            <div>
+              <label
+                htmlFor={formData.accountType === 'teacher' ? 'employeeId' : 'studentId'}
+                className="mb-2 block text-sm font-semibold text-violet-100"
+              >
+                {formData.accountType === 'teacher'
+                  ? 'Teacher / Employee ID'
+                  : 'Student ID'}
+              </label>
+              <input
+                id={formData.accountType === 'teacher' ? 'employeeId' : 'studentId'}
+                type="text"
+                name={formData.accountType === 'teacher' ? 'employeeId' : 'studentId'}
+                placeholder={
+                  formData.accountType === 'teacher'
+                    ? 'Enter your school teacher or employee ID'
+                    : 'Enter your school student ID'
+                }
+                value={
+                  formData.accountType === 'teacher'
+                    ? formData.employeeId
+                    : formData.studentId
+                }
+                onChange={handleInputChange}
+                className={fieldClass}
+                required
+              />
+              <p className="mt-2 text-xs leading-5 text-violet-100/55">
+                This ID is tied to the selected school and is used to identify your school account.
+              </p>
+            </div>
+
             {formData.accountType === 'teacher' && (
               <div className="rounded-2xl border border-amber-300/20 bg-amber-950/15 p-4 text-sm leading-6 text-amber-50/75">
                 <p className="font-semibold text-amber-100">Teacher verification required</p>
                 <p className="mt-1">
-                  After account/email verification, EduGuide will ask for your teacher or employee ID number and a photo/PDF of school identification or employment proof. Your account will not receive the teacher role until an admin approves it.
+                  Your teacher/employee ID is collected here during account creation. After sign-in, EduGuide will ask for a photo/PDF of school identification or employment proof. The verification request is then sent to the administrator configured for your school, and your account will not receive the teacher role until that admin approves it.
                 </p>
               </div>
             )}
