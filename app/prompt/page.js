@@ -134,6 +134,7 @@ export default function Prompt() {
   const [isListening, setIsListening] = useState(false);
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState('student');
+  const [accountType, setAccountType] = useState('student');
   const [theme, setTheme] = useState('dark');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -236,11 +237,12 @@ export default function Prompt() {
     const loadUserRole = async (userId) => {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, account_type')
         .eq('id', userId)
         .maybeSingle();
 
       setUserRole(profile?.role || 'student');
+      setAccountType(profile?.account_type || 'student');
     };
 
     const loadUser = async () => {
@@ -253,6 +255,7 @@ export default function Prompt() {
         loadSessions(activeUser.id);
       } else {
         setUserRole('student');
+        setAccountType('student');
       }
     };
 
@@ -273,6 +276,7 @@ export default function Prompt() {
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setUserRole('student');
+        setAccountType('student');
         setSessions([]);
         setCurrentSession(null);
         setMessages([]);
@@ -976,6 +980,18 @@ export default function Prompt() {
                 <span>{isLight ? 'Night' : 'Light'}</span>
               </span>
             </button>
+            {user && accountType === 'teacher' && userRole !== 'teacher' && (
+              <Link
+                href="/teacher-verification"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    : 'border-amber-300/30 bg-amber-900/20 text-amber-100 hover:bg-amber-900/35'
+                }`}
+              >
+                Verify teacher
+              </Link>
+            )}
             {user && ['teacher', 'guidance', 'admin'].includes(userRole) && (
               <Link
                 href="/dashboard"
