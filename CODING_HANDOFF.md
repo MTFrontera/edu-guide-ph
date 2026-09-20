@@ -33,7 +33,7 @@ Examples:
 
 ---
 
-# 2. End-of-Session Repository State
+# 2. Current Repository State
 
 Repository:
 
@@ -41,42 +41,13 @@ Repository:
 MTFrontera/edu-guide-ph
 ```
 
-The main implementation work was developed on:
-
-```text
-feature/planned-updates-dashboard-rbac
-```
-
-Pull Request:
-
-```text
-PR #1 - Add planned staff dashboard and RBAC baseline
-```
-
-PR #1 was merged into:
+Active production branch:
 
 ```text
 main
 ```
 
-Merge commit:
-
-```text
-0ef4d4901dbb02b18d844e8276da9d92a371afdb
-```
-
-After the merge, documentation was also updated directly on `main`.
-
-The merged application received a successful Vercel production build.
-
-## Important historical note
-
-The PR description contains some statements that became outdated during the long-running branch:
-
-- it says Gemini had not yet replaced Groq;
-- it says local/build validation had not yet occurred.
-
-Those statements describe an earlier point in the PR history. The final merged code does include the Gemini migration, and the production merge was built successfully by Vercel.
+The current application code is on `main`, and the merged production build completed successfully on Vercel.
 
 ---
 
@@ -586,20 +557,18 @@ The administrator does not type arbitrary course names into each teacher-section
 
 This avoids duplicate labels and keeps the teacher's course profile independent from the section assignment.
 
-## Scope warning
+## Current implementation boundary
 
-Treat this as lightweight profile/context information.
+Course selections are lightweight teacher profile/context information.
 
-Do not casually expand it into:
+The current code does not implement:
 
 - grading;
 - attendance;
 - curriculum management;
 - full class scheduling;
 - enrollment management;
-- complete SIS/LMS replacement.
-
-Those would require formal scope change.
+- complete SIS/LMS functionality.
 
 ---
 
@@ -849,33 +818,7 @@ Known hardening items remain:
 
 ---
 
-# 27. Scope / Papers Compatibility
-
-The original project papers focus on:
-
-- AI academic support;
-- career guidance;
-- student activity/query information;
-- teacher/admin dashboard;
-- role-based access;
-- privacy controls.
-
-Later implementation added more detailed operational structure:
-
-- teacher verification workflow;
-- school sections;
-- many-to-many teacher-section assignment;
-- teacher course/subject labels.
-
-These should be described as **implementation-stage refinements or change-controlled additions**, not falsely backdated as original SAD requirements.
-
-A safe explanation is:
-
-> During implementation and dashboard testing, the team identified a need for clearer teacher organization. The dashboard was refined to support multiple teacher-section assignments and teacher subject identification without changing EduGuide's primary AI study/career-guidance purpose.
-
----
-
-# 28. Troubleshooting / Failure Cases
+# 27. Troubleshooting / Failure Cases
 
 The following cases should be checked before rewriting code.
 
@@ -1282,15 +1225,10 @@ Any future query analytics should be designed as a scoped aggregate/approved wor
 
 ---
 
-## Case 29 - Course/section features are challenged as outside the papers
-
-Do not say they were in the original SAD if they were not.
-
-Describe them as implementation-stage refinements and record them in change control if formal documentation is required.
 
 ---
 
-## Case 30 - Someone wants to keep adding features because the system is working
+## Case 29 - Someone wants to keep adding features because the system is working
 
 Prefer validation over feature expansion.
 
@@ -1307,7 +1245,7 @@ Highest-value remaining work:
 
 ---
 
-# 29. Recommended Resume Checklist
+# 28. Recommended Resume Checklist
 
 When development resumes:
 
@@ -1326,7 +1264,7 @@ When development resumes:
 
 ---
 
-# 30. Suggested Next Tests
+# 29. Suggested Next Tests
 
 ## Test A - multiple teachers in one section
 
@@ -1367,7 +1305,7 @@ Do not mark these tests passed until the observed database/UI evidence exists.
 
 ---
 
-# 31. Known Documentation Files
+# 30. Known Documentation Files
 
 Main developer entry point:
 
@@ -1391,7 +1329,7 @@ Keep documentation synchronized with actual code. If a later implementation chan
 
 ---
 
-# 32. Final State at Handoff
+# 31. Final State at Handoff
 
 At the end of the implementation session:
 
