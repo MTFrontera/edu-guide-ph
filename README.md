@@ -16,6 +16,8 @@ The current application is built with Next.js/React, Supabase, Google Gemini, an
 - Use English, Tagalog, Cebuano, or mixed-language prompts.
 - Keep signed-in chat sessions/history.
 - Copy messages, like/dislike AI replies, regenerate the latest reply, and delete paired prompt/response messages.
+- Use context-aware follow-up buttons that change with the current chat topic.
+- Like/dislike feedback influences later replies in the same chat as a soft presentation/usefulness signal without overriding accuracy, privacy, or assessment-help rules.
 - Select, switch, remove, or skip a school section through the student setup flow.
 
 ### Teacher
