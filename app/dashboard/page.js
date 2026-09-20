@@ -39,6 +39,9 @@ export default function DashboardPage() {
   const [reviewingId, setReviewingId] = useState('');
   const [reviewNotes, setReviewNotes] = useState({});
   const [reviewMessage, setReviewMessage] = useState('');
+  const [sectionForm, setSectionForm] = useState({ schoolId: '', name: '', gradeYear: '' });
+  const [sectionActionBusy, setSectionActionBusy] = useState('');
+  const [sectionMessage, setSectionMessage] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +106,122 @@ export default function DashboardPage() {
     const values = (data?.usage || []).map((item) => Number(item.message_count || 0));
     return Math.max(1, ...values);
   }, [data]);
+
+  const refreshDashboardData = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      router.replace('/login');
+      return;
+    }
+
+    const response = await fetch('/api/dashboard', {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error || 'Could not refresh dashboard data.');
+    }
+
+    setData(payload);
+  };
+
+  const createSection = async () => {
+    const schoolId =
+      sectionForm.schoolId ||
+      data?.sectionManagement?.schools?.[0]?.id ||
+      '';
+
+    if (!schoolId || !sectionForm.name.trim()) {
+      setSectionMessage('Choose a school and enter a section name.');
+      return;
+    }
+
+    setSectionActionBusy('create');
+    setSectionMessage('');
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const response = await fetch('/api/sections', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.access_token || ''}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'create-section',
+          schoolId,
+          name: sectionForm.name.trim(),
+          gradeYear: sectionForm.gradeYear.trim(),
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Could not create section.');
+      }
+
+      setSectionForm((current) => ({ ...current, name: '', gradeYear: '' }));
+      setSectionMessage('Section created.');
+      await refreshDashboardData();
+    } catch (sectionError) {
+      setSectionMessage(sectionError.message || 'Could not create section.');
+    } finally {
+      setSectionActionBusy('');
+    }
+  };
+
+  const setTeacherSection = async (teacherId, sectionId, assigned) => {
+    if (!teacherId || !sectionId) return;
+
+    const busyKey = `${assigned ? 'assign' : 'remove'}-${teacherId}-${sectionId}`;
+    setSectionActionBusy(busyKey);
+    setSectionMessage('');
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const response = await fetch('/api/sections', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.access_token || ''}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'set-teacher-section',
+          teacherId,
+          sectionId,
+          assigned,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Could not update teacher assignment.');
+      }
+
+      setSectionMessage(
+        assigned
+          ? 'Teacher assigned to section.'
+          : 'Teacher removed from section.'
+      );
+      await refreshDashboardData();
+    } catch (sectionError) {
+      setSectionMessage(sectionError.message || 'Could not update teacher assignment.');
+    } finally {
+      setSectionActionBusy('');
+    }
+  };
 
   const reviewTeacher = async (requestId, decision) => {
     setReviewMessage('');
@@ -218,6 +337,139 @@ export default function DashboardPage() {
     profile.email ||
     'Staff member';
 
+  if (profile.role === 'teacher') {
+    const teacherSections = data?.teacherSections || [];
+
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100">
+        <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_15%_10%,rgba(139,92,246,.26),transparent_30%),radial-gradient(circle_at_80%_10%,rgba(59,130,246,.14),transparent_32%),linear-gradient(180deg,#160a2f_0%,#0f172a_70%)]" />
+
+        <header className="sticky top-0 z-20 border-b border-violet-300/20 bg-slate-950/80 px-4 py-4 backdrop-blur">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <Image src="/edu.png" alt="EduGuide PH logo" width={44} height={44} className="h-10 w-10 object-contain" />
+              <div>
+                <p className="text-lg font-bold text-white">EduGuide PH</p>
+                <p className="text-xs text-violet-200/70">Teacher dashboard</p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                await supabase.auth.signOut();
+                router.replace('/');
+              }}
+              className="rounded-lg bg-violet-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-violet-300 sm:text-sm"
+            >
+              Logout
+            </button>
+          </div>
+        </header>
+
+        <div className="mx-auto max-w-7xl space-y-7 px-4 py-8 sm:px-6 lg:px-8">
+          <section className="rounded-3xl border border-violet-300/20 bg-violet-950/30 p-6 shadow-2xl backdrop-blur sm:p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-200/70">Teacher workspace</p>
+            <h1 className="mt-3 text-3xl font-bold text-white sm:text-4xl">Welcome, {staffName}</h1>
+            <p className="mt-3 max-w-3xl leading-7 text-violet-100/70">
+              Your dashboard is split into the EduGuide AI workspace and the class sections assigned to you. You only receive student rosters for sections an administrator has assigned to your teacher account.
+            </p>
+          </section>
+
+          <section className="grid gap-5 lg:grid-cols-2">
+            <Link
+              href="/prompt"
+              className="group rounded-3xl border border-violet-300/20 bg-violet-950/30 p-6 shadow-xl transition hover:border-violet-300/45 hover:bg-violet-950/45 sm:p-8"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200/70">Area 1</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">EduGuide AI</h2>
+              <p className="mt-3 text-sm leading-6 text-violet-100/65">
+                Open the AI workspace for explanations, lesson support, practice-question generation, brainstorming, and other teaching assistance.
+              </p>
+              <span className="mt-5 inline-flex rounded-xl bg-violet-400 px-4 py-2.5 text-sm font-semibold text-slate-950 group-hover:bg-violet-300">
+                Open AI workspace
+              </span>
+            </Link>
+
+            <div className="rounded-3xl border border-cyan-300/20 bg-cyan-950/10 p-6 shadow-xl sm:p-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200/70">Area 2</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">My sections</h2>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <StatCard label="Assigned sections" value={summary.assignedSections} helper="Classes explicitly assigned to you." />
+                <StatCard label="Students" value={summary.assignedStudents} helper="Students currently listed across your assigned sections." />
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200/70">Class rosters</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Sections assigned to you</h2>
+              <p className="mt-2 text-sm leading-6 text-violet-100/60">
+                Students control their own section membership. If they switch or remove their section, the roster updates automatically.
+              </p>
+            </div>
+
+            {teacherSections.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-violet-300/25 bg-violet-950/20 px-6 py-12 text-center">
+                <p className="font-semibold text-white">No sections assigned yet</p>
+                <p className="mt-2 text-sm text-violet-100/60">
+                  An administrator must assign one or more sections to your verified teacher account before student names appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-5 xl:grid-cols-2">
+                {teacherSections.map((section) => (
+                  <article key={section.id} className="overflow-hidden rounded-3xl border border-violet-300/20 bg-violet-950/25 shadow-xl">
+                    <div className="border-b border-violet-300/15 px-5 py-4 sm:px-6">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <h3 className="text-xl font-bold text-white">{section.name}</h3>
+                          {section.gradeYear && (
+                            <p className="mt-1 text-sm text-violet-100/60">{section.gradeYear}</p>
+                          )}
+                        </div>
+                        <span className="rounded-full border border-violet-300/20 bg-slate-950/35 px-3 py-1 text-xs font-semibold text-violet-100">
+                          {section.studentCount || 0} student{Number(section.studentCount || 0) === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="max-h-80 overflow-y-auto">
+                      {(section.students || []).length === 0 ? (
+                        <p className="px-6 py-8 text-center text-sm text-violet-100/55">
+                          No students have selected this section yet.
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-violet-300/10">
+                          {(section.students || []).map((student, index) => (
+                            <div key={student.id} className="flex items-center gap-3 px-5 py-3 sm:px-6">
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-400/15 text-xs font-semibold text-violet-100">
+                                {index + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-white">{student.name || 'Unnamed student'}</p>
+                                {student.gradeYear && (
+                                  <p className="text-xs text-violet-100/55">{student.gradeYear}</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-emerald-300/20 bg-emerald-950/10 p-5 text-sm leading-6 text-emerald-50/70">
+            Teacher access is roster-scoped. This dashboard does not expose student chat content, and a teacher cannot open rosters for sections that have not been assigned to them.
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_15%_10%,rgba(139,92,246,.26),transparent_30%),radial-gradient(circle_at_80%_10%,rgba(168,85,247,.18),transparent_32%),linear-gradient(180deg,#160a2f_0%,#0f172a_70%)]" />
@@ -266,6 +518,135 @@ export default function DashboardPage() {
             </div>
           </div>
         </section>
+
+        {profile.role === 'admin' && (
+          <section className="rounded-3xl border border-blue-300/20 bg-blue-950/10 p-6 shadow-xl backdrop-blur sm:p-8">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200/75">School structure</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Sections & teacher assignments</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-blue-50/65">
+                Create the real school sections here, then assign verified teachers only to the sections they actually handle.
+              </p>
+            </div>
+
+            {sectionMessage && (
+              <div className="mt-5 rounded-xl border border-blue-300/20 bg-slate-950/30 px-4 py-3 text-sm text-blue-50">
+                {sectionMessage}
+              </div>
+            )}
+
+            <div className="mt-6 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
+              <select
+                value={sectionForm.schoolId || data?.sectionManagement?.schools?.[0]?.id || ''}
+                onChange={(event) =>
+                  setSectionForm((current) => ({ ...current, schoolId: event.target.value }))
+                }
+                className="rounded-xl border border-blue-300/20 bg-slate-950/55 px-3 py-2.5 text-sm text-white outline-none"
+              >
+                {(data?.sectionManagement?.schools || []).map((school) => (
+                  <option key={school.id} value={school.id}>{school.name}</option>
+                ))}
+              </select>
+              <input
+                value={sectionForm.gradeYear}
+                onChange={(event) =>
+                  setSectionForm((current) => ({ ...current, gradeYear: event.target.value }))
+                }
+                placeholder="Grade / Year (optional)"
+                className="rounded-xl border border-blue-300/20 bg-slate-950/55 px-3 py-2.5 text-sm text-white placeholder-blue-100/35 outline-none"
+              />
+              <input
+                value={sectionForm.name}
+                onChange={(event) =>
+                  setSectionForm((current) => ({ ...current, name: event.target.value }))
+                }
+                placeholder="Section name"
+                className="rounded-xl border border-blue-300/20 bg-slate-950/55 px-3 py-2.5 text-sm text-white placeholder-blue-100/35 outline-none"
+              />
+              <button
+                onClick={createSection}
+                disabled={sectionActionBusy === 'create'}
+                className="rounded-xl bg-blue-300 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-blue-200 disabled:opacity-50"
+              >
+                {sectionActionBusy === 'create' ? 'Creating...' : 'Add section'}
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 xl:grid-cols-2">
+              {(data?.sectionManagement?.sections || []).map((section) => {
+                const availableTeachers = (data?.sectionManagement?.teachers || []).filter(
+                  (teacher) =>
+                    teacher.schoolId === section.schoolId &&
+                    !(section.teachers || []).some((assigned) => assigned.id === teacher.id)
+                );
+
+                return (
+                  <article key={section.id} className="rounded-2xl border border-blue-300/15 bg-slate-950/30 p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="font-semibold text-white">{section.name}</h3>
+                        <p className="mt-1 text-xs text-blue-100/55">
+                          {section.gradeYear || 'No grade/year set'} · {section.studentCount || 0} student{Number(section.studentCount || 0) === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-blue-100/55">Assigned teachers</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(section.teachers || []).map((teacher) => (
+                          <span key={teacher.id} className="inline-flex items-center gap-2 rounded-full border border-blue-300/20 bg-blue-950/20 px-3 py-1.5 text-xs text-blue-50">
+                            {teacher.name || teacher.email}
+                            <button
+                              onClick={() => setTeacherSection(teacher.id, section.id, false)}
+                              disabled={Boolean(sectionActionBusy)}
+                              className="font-bold text-rose-200 hover:text-rose-100 disabled:opacity-50"
+                              title="Remove teacher from this section"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                        {(section.teachers || []).length === 0 && (
+                          <span className="text-xs text-blue-100/45">No teacher assigned.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {availableTeachers.length > 0 && (
+                      <div className="mt-4">
+                        <select
+                          defaultValue=""
+                          onChange={(event) => {
+                            const teacherId = event.target.value;
+                            if (teacherId) {
+                              void setTeacherSection(teacherId, section.id, true);
+                              event.target.value = '';
+                            }
+                          }}
+                          className="w-full rounded-xl border border-blue-300/20 bg-slate-950/55 px-3 py-2 text-sm text-white outline-none"
+                        >
+                          <option value="">Assign a verified teacher...</option>
+                          {availableTeachers.map((teacher) => (
+                            <option key={teacher.id} value={teacher.id}>
+                              {teacher.name || teacher.email}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+
+              {(data?.sectionManagement?.sections || []).length === 0 && (
+                <div className="rounded-2xl border border-dashed border-blue-300/20 px-5 py-8 text-center text-sm text-blue-50/55 xl:col-span-2">
+                  No sections configured yet. Add the school's real section names above.
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {profile.role === 'admin' && (
           <section className="rounded-3xl border border-cyan-300/20 bg-cyan-950/10 p-6 shadow-xl backdrop-blur sm:p-8">
