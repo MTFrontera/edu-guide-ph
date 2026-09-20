@@ -253,7 +253,7 @@ A teacher dashboard returns only sections explicitly assigned to that teacher. S
 
 ## Courses / Subjects
 
-Course/subject support is a late-stage dashboard refinement, not part of the earliest SAD baseline.
+EduGuide includes a school-scoped course/subject catalog for teacher profile context.
 
 The current design is:
 
@@ -272,7 +272,7 @@ one teacher -> many courses
 one course -> many teachers
 ```
 
-The feature is intended as lightweight teacher profile/context information. It should not expand into grading, attendance, full scheduling, curriculum management, or a replacement SIS/LMS unless the project scope is formally changed.
+The current implementation treats these selections as lightweight teacher profile/context information. It does not implement grading, attendance, full scheduling, curriculum management, or a full SIS/LMS.
 
 ---
 
@@ -533,14 +533,6 @@ Do not assume the baseline schema is enough. Review the migration references and
 
 ---
 
-## Project Scope Note
-
-The project papers define EduGuide primarily around AI academic/career support, role-aware staff access, student activity information, and a minimum admin/teacher dashboard.
-
-Sections, multi-teacher assignment, verification workflow refinements, and teacher subject labels can be documented as implementation-stage refinements/change-controlled additions. Avoid allowing these additions to turn the project into a full SIS/LMS without formal scope approval.
-
----
-
 ## Repository Handoff Notes
 
 For a detailed implementation history, current database state, known test evidence, failure scenarios, and unfinished work, see:
@@ -551,13 +543,3 @@ CODING_HANDOFF.md
 
 ---
 
-## Contributors
-
-Team W.T.T.:
-- Fronteras, Mark Tristan B.
-- Pulmon, Paul Adrian
-- Baja, Mark Daniel
-- Nakano, Garri Clyde
-- Pepito, Leeyam Germain E.
-
-Course context: IS132-1L Project Management 1 Laboratory, 2026.
