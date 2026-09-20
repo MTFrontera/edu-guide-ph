@@ -362,8 +362,10 @@ export default function Prompt() {
       if (data.messages) {
         setMessages(
           data.messages.map((msg) => ({
+            id: msg.id,
             role: msg.role,
             text: msg.content,
+            feedback: msg.feedback || null,
           }))
         );
       }
@@ -766,13 +768,17 @@ export default function Prompt() {
         }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || 'Failed to save message');
       }
+
+      return data.message || null;
     } catch (error) {
       console.error('Error saving message:', error);
       setGlobalError('Message was sent, but saving chat history failed.');
+      return null;
     }
   };
 
@@ -807,11 +813,32 @@ export default function Prompt() {
         : { type: 'text', name: a.name }
     );
 
-    const userMessage = { role: 'user', text: userFacingMessage, attachments: localAttachmentPreview };
+    const localUserKey = `user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const userMessage = {
+      localKey: localUserKey,
+      role: 'user',
+      text: userFacingMessage,
+      attachments: localAttachmentPreview,
+      requestAttachments: pendingAttachments,
+    };
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setLoading(true);
     setGlobalError('');
+
+    let savedUserMessage = null;
+    if (activeUser && sessionId) {
+      savedUserMessage = await saveMessage(sessionId, 'user', userFacingMessage);
+      if (savedUserMessage?.id) {
+        setMessages((prev) =>
+          prev.map((item) =>
+            item.localKey === localUserKey
+              ? { ...item, id: savedUserMessage.id }
+              : item
+          )
+        );
+      }
+    }
 
     try {
       const res = await fetch('/api/chat', {
@@ -833,13 +860,29 @@ export default function Prompt() {
       }
 
       const aiText = data.response?.trim() || 'No response received';
-      setMessages((prev) => [...prev, { role: 'assistant', text: aiText }]);
+      const localAssistantKey = `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setMessages((prev) => [
+        ...prev,
+        { localKey: localAssistantKey, role: 'assistant', text: aiText, feedback: null },
+      ]);
       setPendingAttachments([]);
       setAttachmentStatus('');
 
       if (activeUser && sessionId) {
-        await saveMessage(sessionId, 'user', userFacingMessage);
-        await saveMessage(sessionId, 'assistant', aiText);
+        const savedAssistantMessage = await saveMessage(sessionId, 'assistant', aiText);
+        if (savedAssistantMessage?.id) {
+          setMessages((prev) =>
+            prev.map((item) =>
+              item.localKey === localAssistantKey
+                ? {
+                    ...item,
+                    id: savedAssistantMessage.id,
+                    feedback: savedAssistantMessage.feedback || null,
+                  }
+                : item
+            )
+          );
+        }
 
         if (messages.length === 0) {
           const baseTitle = trimmed || (pendingAttachments[0]?.name ? `File: ${pendingAttachments[0].name}` : 'New chat');
