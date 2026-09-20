@@ -42,10 +42,17 @@ For Vercel, update the project's Environment Variables and redeploy so the deplo
 
 ## Database scripts
 
-- `SUPABASE_DASHBOARD_UPGRADE.sql` upgrades an older EduGuide database with staff roles and dashboard support.
-- `supabase-schema.sql` is the older baseline schema and should not be used by itself for the new EduGuide PH project.
+Current migration/reference files:
 
-The active **EduGuide PH** database has already been provisioned directly in Supabase, so you do not need to rerun the old setup instructions.
+- `SUPABASE_DASHBOARD_UPGRADE.sql`
+- `SUPABASE_TEACHER_VERIFICATION.sql`
+- `SUPABASE_CHAT_MESSAGE_ACTIONS.sql`
+- `SUPABASE_SECTIONS_AND_ROSTERS.sql`
+- `SUPABASE_SCHOOL_ADMIN_AND_ACCOUNT_IDS.sql`
+- `SUPABASE_COURSES_AND_TEACHER_SUBJECTS.sql`
+
+The active **EduGuide PH** database has already received the live migrations used by the current application. Historical baseline schema files were removed from `main` to avoid accidental use of outdated setup instructions.
+
 
 ## Creating accounts
 
