@@ -133,6 +133,7 @@ export default function Prompt() {
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState('student');
   const [theme, setTheme] = useState('dark');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -238,7 +239,15 @@ export default function Prompt() {
       } = await supabase.auth.getUser();
       setUser(activeUser);
       if (activeUser) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', activeUser.id)
+          .maybeSingle();
+        setUserRole(profile?.role || 'student');
         loadSessions(activeUser.id);
+      } else {
+        setUserRole('student');
       }
     };
 
@@ -250,6 +259,12 @@ export default function Prompt() {
       if (session?.user) {
         setUser(session.user);
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .maybeSingle();
+          setUserRole(profile?.role || 'student');
           loadSessions(session.user.id, { force: true });
         }
         return;
@@ -257,6 +272,7 @@ export default function Prompt() {
 
       if (event === 'SIGNED_OUT') {
         setUser(null);
+        setUserRole('student');
         setSessions([]);
         setCurrentSession(null);
         setMessages([]);
@@ -953,6 +969,19 @@ export default function Prompt() {
                 <span>{isLight ? 'Night' : 'Light'}</span>
               </span>
             </button>
+            {user && ['teacher', 'guidance', 'admin'].includes(userRole) && (
+              <Link
+                href="/dashboard"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-violet-300 bg-white text-violet-700 hover:bg-violet-100'
+                    : 'border-violet-300/30 bg-violet-900/35 text-violet-100 hover:border-violet-300/50 hover:bg-violet-900/55'
+                }`}
+              >
+                Dashboard
+              </Link>
+            )}
+
             {user ? (
               <button
                 onClick={async () => {
