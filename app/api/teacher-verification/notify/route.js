@@ -87,6 +87,7 @@ export async function POST(request) {
             <table style="border-collapse:collapse">
               <tr><td style="padding:4px 12px 4px 0"><strong>Name</strong></td><td>${escapeHtml(teacherName)}</td></tr>
               <tr><td style="padding:4px 12px 4px 0"><strong>Email</strong></td><td>${escapeHtml(payload?.teacherEmail)}</td></tr>
+              <tr><td style="padding:4px 12px 4px 0"><strong>Contact number</strong></td><td>${escapeHtml(payload?.teacherPhone || 'Not provided')}</td></tr>
               <tr><td style="padding:4px 12px 4px 0"><strong>Teacher / Employee ID</strong></td><td>${escapeHtml(payload?.employeeId)}</td></tr>
             </table>
             <p>Sign in to the EduGuide admin dashboard to review the private verification document and approve or reject the request.</p>
