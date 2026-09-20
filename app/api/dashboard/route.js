@@ -61,10 +61,14 @@ export async function GET(request) {
     const { supabase, profile } = context;
 
     if (profile.role === 'teacher') {
-      const sectionsResult = await supabase.rpc('teacher_my_sections');
+      const [sectionsResult, coursesResult] = await Promise.all([
+        supabase.rpc('teacher_my_sections'),
+        supabase.rpc('teacher_course_catalog'),
+      ]);
 
-      if (sectionsResult.error) {
-        const normalized = normalizeRpcError(sectionsResult.error);
+      const teacherRpcError = sectionsResult.error || coursesResult.error;
+      if (teacherRpcError) {
+        const normalized = normalizeRpcError(teacherRpcError);
         return Response.json(
           { error: normalized.message },
           { status: normalized.status }
@@ -72,6 +76,7 @@ export async function GET(request) {
       }
 
       const teacherSections = sectionsResult.data || [];
+      const teacherCourseCatalog = coursesResult.data || [];
       const assignedStudentIds = new Set(
         teacherSections.flatMap((section) =>
           (section.students || []).map((student) => student.id)
@@ -81,6 +86,7 @@ export async function GET(request) {
       return Response.json({
         profile,
         teacherSections,
+        teacherCourseCatalog,
         summary: {
           assignedSections: teacherSections.length,
           assignedStudents: assignedStudentIds.size,
@@ -141,6 +147,7 @@ export async function GET(request) {
       sectionManagement = sectionResult.data || {
         sections: [],
         teachers: [],
+        courses: [],
         schools: [],
       };
 
