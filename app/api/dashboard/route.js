@@ -28,7 +28,7 @@ async function getAuthorizedContext(request) {
   const supabase = createSupabaseClientWithAuth(token);
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, email, first_name, last_name, role, account_type, school_id')
+    .select('id, email, first_name, last_name, role, account_type, school_id, section_id, section_onboarding_complete')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -59,6 +59,42 @@ export async function GET(request) {
     if (context.error) return context.error;
 
     const { supabase, profile } = context;
+
+    if (profile.role === 'teacher') {
+      const sectionsResult = await supabase.rpc('teacher_my_sections');
+
+      if (sectionsResult.error) {
+        const normalized = normalizeRpcError(sectionsResult.error);
+        return Response.json(
+          { error: normalized.message },
+          { status: normalized.status }
+        );
+      }
+
+      const teacherSections = sectionsResult.data || [];
+      const assignedStudentIds = new Set(
+        teacherSections.flatMap((section) =>
+          (section.students || []).map((student) => student.id)
+        )
+      );
+
+      return Response.json({
+        profile,
+        teacherSections,
+        summary: {
+          assignedSections: teacherSections.length,
+          assignedStudents: assignedStudentIds.size,
+        },
+        recentActivity: [],
+        usage: [],
+        teacherVerifications: [],
+        privacy: {
+          messageContentIncluded: false,
+          note:
+            'Teacher access is limited to rosters for sections explicitly assigned to that teacher. Student chat content is not returned.',
+        },
+      });
+    }
 
     const [summaryResult, activityResult, usageResult] = await Promise.all([
       supabase.rpc('dashboard_summary'),
@@ -109,6 +145,7 @@ export async function GET(request) {
       summary: summaryResult.data || {},
       recentActivity: activityResult.data || [],
       usage: usageResult.data || [],
+      teacherSections: [],
       teacherVerifications,
       privacy: {
         messageContentIncluded: false,
