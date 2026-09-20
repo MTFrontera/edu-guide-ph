@@ -124,6 +124,26 @@ export async function POST(request) {
       return Response.json({ error: 'Admin access is required.' }, { status: 403 });
     }
 
+    if (action === 'update-school-admin-email') {
+      const schoolId = String(body?.schoolId || '').trim();
+      const adminEmail = String(body?.adminEmail || '').trim();
+
+      if (!schoolId || !adminEmail) {
+        return Response.json(
+          { error: 'School and administrator email are required.' },
+          { status: 400 }
+        );
+      }
+
+      const { error } = await supabase.rpc('admin_update_school_admin_email', {
+        p_school_id: schoolId,
+        p_admin_email: adminEmail,
+      });
+
+      if (error) throw error;
+      return Response.json({ success: true });
+    }
+
     if (action === 'create-section') {
       const schoolId = String(body?.schoolId || '').trim();
       const name = String(body?.name || '').trim();
