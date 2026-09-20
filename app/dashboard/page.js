@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const [sectionForm, setSectionForm] = useState({ schoolId: '', name: '', gradeYear: '' });
   const [sectionActionBusy, setSectionActionBusy] = useState('');
   const [sectionMessage, setSectionMessage] = useState('');
+  const [schoolAdminDrafts, setSchoolAdminDrafts] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -129,6 +130,52 @@ export default function DashboardPage() {
     }
 
     setData(payload);
+  };
+
+  const updateSchoolAdminEmail = async (schoolId, currentEmail) => {
+    const adminEmail = String(
+      schoolAdminDrafts[schoolId] ?? currentEmail ?? ''
+    ).trim();
+
+    if (!adminEmail) {
+      setSectionMessage('Enter the school administrator email.');
+      return;
+    }
+
+    const busyKey = `admin-email-${schoolId}`;
+    setSectionActionBusy(busyKey);
+    setSectionMessage('');
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const response = await fetch('/api/sections', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.access_token || ''}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'update-school-admin-email',
+          schoolId,
+          adminEmail,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Could not update administrator email.');
+      }
+
+      setSectionMessage('School administrator email updated.');
+      await refreshDashboardData();
+    } catch (schoolError) {
+      setSectionMessage(schoolError.message || 'Could not update administrator email.');
+    } finally {
+      setSectionActionBusy('');
+    }
   };
 
   const createSection = async () => {
@@ -535,7 +582,53 @@ export default function DashboardPage() {
               </div>
             )}
 
-            <div className="mt-6 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
+            <div className="mt-6 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100/60">
+                Verification administrator
+              </p>
+              {(data?.sectionManagement?.schools || []).map((school) => (
+                <div
+                  key={school.id}
+                  className="grid gap-3 rounded-2xl border border-blue-300/15 bg-slate-950/30 p-4 lg:grid-cols-[1fr_1.2fr_auto]"
+                >
+                  <div>
+                    <p className="font-semibold text-white">{school.name}</p>
+                    <p className="mt-1 text-xs leading-5 text-blue-100/50">
+                      Teacher verification notifications for this academy are sent to this single administrator email.
+                    </p>
+                  </div>
+                  <input
+                    type="email"
+                    value={schoolAdminDrafts[school.id] ?? school.adminEmail ?? ''}
+                    onChange={(event) =>
+                      setSchoolAdminDrafts((current) => ({
+                        ...current,
+                        [school.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="admin@school.edu"
+                    className="rounded-xl border border-blue-300/20 bg-slate-950/55 px-3 py-2.5 text-sm text-white placeholder-blue-100/35 outline-none"
+                  />
+                  <button
+                    onClick={() => updateSchoolAdminEmail(school.id, school.adminEmail)}
+                    disabled={sectionActionBusy === `admin-email-${school.id}`}
+                    className="rounded-xl border border-blue-300/30 bg-blue-950/25 px-4 py-2.5 text-sm font-semibold text-blue-50 hover:bg-blue-950/40 disabled:opacity-50"
+                  >
+                    {sectionActionBusy === `admin-email-${school.id}`
+                      ? 'Saving...'
+                      : 'Save admin email'}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 border-t border-blue-300/10 pt-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100/60">
+                Sections
+              </p>
+            </div>
+
+            <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
               <select
                 value={sectionForm.schoolId || data?.sectionManagement?.schools?.[0]?.id || ''}
                 onChange={(event) =>
