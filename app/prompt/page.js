@@ -909,6 +909,22 @@ export default function Prompt() {
     }
   };
 
+  const handleComposerKeyDown = (event) => {
+    if (
+      event.key !== 'Enter' ||
+      event.shiftKey ||
+      event.nativeEvent?.isComposing
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!loading && !isProcessingAttachments) {
+      void sendMessage();
+    }
+  };
+
   const copyMessage = async (messageIndex) => {
     const message = messages[messageIndex];
     if (!message?.text || typeof navigator === 'undefined' || !navigator.clipboard) return;
@@ -1748,13 +1764,14 @@ export default function Prompt() {
                   </div>
 
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <input
-                      type="text"
+                    <textarea
+                      rows={1}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && !loading && sendMessage()}
+                      onKeyDown={handleComposerKeyDown}
                       placeholder="Type your message..."
-                      className={`min-w-0 flex-1 bg-transparent px-1 py-1 text-[13px] outline-none ${
+                      aria-label="Message EduGuide. Press Enter to send or Shift+Enter for a new line."
+                      className={`max-h-32 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1 text-[13px] leading-5 outline-none ${
                         isLight ? 'text-slate-900 placeholder-slate-400' : 'text-white placeholder-violet-100/45'
                       }`}
                       disabled={loading || isProcessingAttachments}
@@ -2301,13 +2318,14 @@ export default function Prompt() {
                   </div>
 
                   <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-                    <input
-                      type="text"
+                    <textarea
+                      rows={1}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && !loading && sendMessage()}
+                      onKeyDown={handleComposerKeyDown}
                       placeholder="Type your message..."
-                      className={`min-w-0 flex-1 bg-transparent px-1 py-1 text-[13px] outline-none sm:px-2 sm:text-sm ${
+                      aria-label="Message EduGuide. Press Enter to send or Shift+Enter for a new line."
+                      className={`max-h-32 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1 text-[13px] leading-5 outline-none sm:px-2 sm:text-sm ${
                         isLight ? 'text-slate-900 placeholder-slate-400' : 'text-white placeholder-violet-100/45'
                       }`}
                       disabled={loading || isProcessingAttachments}
