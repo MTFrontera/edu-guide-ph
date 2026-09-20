@@ -19,6 +19,31 @@ export default function Login() {
   useEffect(() => {
     let cancelled = false;
 
+    const destinationForUser = async (userId) => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, account_type, section_onboarding_complete')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (['admin', 'guidance', 'teacher'].includes(profile?.role)) {
+        return '/dashboard';
+      }
+
+      if (profile?.account_type === 'teacher') {
+        return '/teacher-verification';
+      }
+
+      if (
+        profile?.account_type === 'student' &&
+        !profile?.section_onboarding_complete
+      ) {
+        return '/student-setup';
+      }
+
+      return '/prompt';
+    };
+
     const checkSession = async () => {
       const {
         data: { session },
@@ -27,7 +52,7 @@ export default function Login() {
       if (cancelled) return;
 
       if (session?.user) {
-        router.replace('/prompt');
+        router.replace(await destinationForUser(session.user.id));
         return;
       }
 
@@ -40,7 +65,9 @@ export default function Login() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user && event !== 'SIGNED_OUT') {
-        router.replace('/prompt');
+        void destinationForUser(session.user.id).then((destination) => {
+          if (!cancelled) router.replace(destination);
+        });
         return;
       }
 
@@ -77,7 +104,24 @@ export default function Login() {
       if (signInError) throw signInError;
 
       if (data.user) {
-        router.replace('/prompt');
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, account_type, section_onboarding_complete')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (['admin', 'guidance', 'teacher'].includes(profile?.role)) {
+          router.replace('/dashboard');
+        } else if (profile?.account_type === 'teacher') {
+          router.replace('/teacher-verification');
+        } else if (
+          profile?.account_type === 'student' &&
+          !profile?.section_onboarding_complete
+        ) {
+          router.replace('/student-setup');
+        } else {
+          router.replace('/prompt');
+        }
       }
     } catch (submitError) {
       setError(submitError.message);

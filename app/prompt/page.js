@@ -122,6 +122,42 @@ function SendIcon(props) {
   );
 }
 
+function CopyIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" {...props}>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3" />
+    </svg>
+  );
+}
+
+function ThumbsUpIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" {...props}>
+      <path d="M7 10v10H4a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2h3z" />
+      <path d="M7 10l4-7a2 2 0 0 1 3 2v4h5a2 2 0 0 1 2 2l-1 7a2 2 0 0 1-2 2H7" />
+    </svg>
+  );
+}
+
+function ThumbsDownIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" {...props}>
+      <path d="M7 14V4H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h3z" />
+      <path d="M7 14l4 7a2 2 0 0 0 3-2v-4h5a2 2 0 0 0 2-2l-1-7a2 2 0 0 0-2-2H7" />
+    </svg>
+  );
+}
+
+function RefreshIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" {...props}>
+      <path d="M20 11a8 8 0 1 0 2 5" />
+      <path d="M20 4v7h-7" />
+    </svg>
+  );
+}
+
 export default function Prompt() {
   const router = useRouter();
   const MAX_ATTACHMENTS = 6;
@@ -133,6 +169,8 @@ export default function Prompt() {
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState('student');
+  const [accountType, setAccountType] = useState('student');
   const [theme, setTheme] = useState('dark');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -149,6 +187,8 @@ export default function Prompt() {
   const [isProcessingAttachments, setIsProcessingAttachments] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(true);
+  const [messageActionBusy, setMessageActionBusy] = useState('');
+  const [copiedMessageIndex, setCopiedMessageIndex] = useState(null);
 
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
@@ -232,13 +272,28 @@ export default function Prompt() {
   }, []);
 
   useEffect(() => {
+    const loadUserRole = async (userId) => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, account_type')
+        .eq('id', userId)
+        .maybeSingle();
+
+      setUserRole(profile?.role || 'student');
+      setAccountType(profile?.account_type || 'student');
+    };
+
     const loadUser = async () => {
       const {
         data: { user: activeUser },
       } = await supabase.auth.getUser();
       setUser(activeUser);
       if (activeUser) {
+        await loadUserRole(activeUser.id);
         loadSessions(activeUser.id);
+      } else {
+        setUserRole('student');
+        setAccountType('student');
       }
     };
 
@@ -250,6 +305,7 @@ export default function Prompt() {
       if (session?.user) {
         setUser(session.user);
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          void loadUserRole(session.user.id);
           loadSessions(session.user.id, { force: true });
         }
         return;
@@ -257,6 +313,8 @@ export default function Prompt() {
 
       if (event === 'SIGNED_OUT') {
         setUser(null);
+        setUserRole('student');
+        setAccountType('student');
         setSessions([]);
         setCurrentSession(null);
         setMessages([]);
@@ -304,8 +362,10 @@ export default function Prompt() {
       if (data.messages) {
         setMessages(
           data.messages.map((msg) => ({
+            id: msg.id,
             role: msg.role,
             text: msg.content,
+            feedback: msg.feedback || null,
           }))
         );
       }
@@ -708,13 +768,17 @@ export default function Prompt() {
         }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || 'Failed to save message');
       }
+
+      return data.message || null;
     } catch (error) {
       console.error('Error saving message:', error);
       setGlobalError('Message was sent, but saving chat history failed.');
+      return null;
     }
   };
 
@@ -749,17 +813,45 @@ export default function Prompt() {
         : { type: 'text', name: a.name }
     );
 
-    const userMessage = { role: 'user', text: userFacingMessage, attachments: localAttachmentPreview };
+    const localUserKey = `user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const userMessage = {
+      localKey: localUserKey,
+      role: 'user',
+      text: userFacingMessage,
+      attachments: localAttachmentPreview,
+      requestAttachments: pendingAttachments,
+    };
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setLoading(true);
     setGlobalError('');
 
+    let savedUserMessage = null;
+    if (activeUser && sessionId) {
+      savedUserMessage = await saveMessage(sessionId, 'user', userFacingMessage);
+      if (savedUserMessage?.id) {
+        setMessages((prev) =>
+          prev.map((item) =>
+            item.localKey === localUserKey
+              ? { ...item, id: savedUserMessage.id }
+              : item
+          )
+        );
+      }
+    }
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: outboundMessage, attachments: pendingAttachments }),
+        body: JSON.stringify({
+          message: outboundMessage,
+          attachments: pendingAttachments,
+          history: messages.slice(-12).map((item) => ({
+            role: item.role,
+            text: item.text,
+          })),
+        }),
       });
 
       const data = await res.json();
@@ -768,13 +860,29 @@ export default function Prompt() {
       }
 
       const aiText = data.response?.trim() || 'No response received';
-      setMessages((prev) => [...prev, { role: 'assistant', text: aiText }]);
+      const localAssistantKey = `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setMessages((prev) => [
+        ...prev,
+        { localKey: localAssistantKey, role: 'assistant', text: aiText, feedback: null },
+      ]);
       setPendingAttachments([]);
       setAttachmentStatus('');
 
       if (activeUser && sessionId) {
-        await saveMessage(sessionId, 'user', userFacingMessage);
-        await saveMessage(sessionId, 'assistant', aiText);
+        const savedAssistantMessage = await saveMessage(sessionId, 'assistant', aiText);
+        if (savedAssistantMessage?.id) {
+          setMessages((prev) =>
+            prev.map((item) =>
+              item.localKey === localAssistantKey
+                ? {
+                    ...item,
+                    id: savedAssistantMessage.id,
+                    feedback: savedAssistantMessage.feedback || null,
+                  }
+                : item
+            )
+          );
+        }
 
         if (messages.length === 0) {
           const baseTitle = trimmed || (pendingAttachments[0]?.name ? `File: ${pendingAttachments[0].name}` : 'New chat');
@@ -801,8 +909,210 @@ export default function Prompt() {
     }
   };
 
+  const copyMessage = async (messageIndex) => {
+    const message = messages[messageIndex];
+    if (!message?.text || typeof navigator === 'undefined' || !navigator.clipboard) return;
+
+    try {
+      await navigator.clipboard.writeText(message.text);
+      setCopiedMessageIndex(messageIndex);
+      setTimeout(() => {
+        setCopiedMessageIndex((current) => (current === messageIndex ? null : current));
+      }, 1400);
+    } catch (copyError) {
+      console.error('Copy message error:', copyError);
+      setGlobalError('Could not copy that message.');
+    }
+  };
+
+  const setMessageFeedback = async (messageIndex, nextFeedback) => {
+    const message = messages[messageIndex];
+    if (!message || message.role !== 'assistant') return;
+
+    const feedback = message.feedback === nextFeedback ? null : nextFeedback;
+    const busyKey = `feedback-${messageIndex}`;
+    setMessageActionBusy(busyKey);
+    setGlobalError('');
+
+    setMessages((prev) =>
+      prev.map((item, index) =>
+        index === messageIndex ? { ...item, feedback } : item
+      )
+    );
+
+    try {
+      if (user && message.id) {
+        const headers = await getAuthHeaders(true);
+        const response = await fetch('/api/chat/messages', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            messageId: message.id,
+            feedback,
+          }),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Could not save feedback.');
+        }
+      }
+    } catch (feedbackError) {
+      setMessages((prev) =>
+        prev.map((item, index) =>
+          index === messageIndex ? { ...item, feedback: message.feedback || null } : item
+        )
+      );
+      setGlobalError(feedbackError.message || 'Could not save feedback.');
+    } finally {
+      setMessageActionBusy('');
+    }
+  };
+
+  const deletePromptAt = async (messageIndex) => {
+    const promptMessage = messages[messageIndex];
+    if (!promptMessage || promptMessage.role !== 'user') return;
+
+    const pairedAssistant =
+      messages[messageIndex + 1]?.role === 'assistant'
+        ? messages[messageIndex + 1]
+        : null;
+
+    const confirmed = window.confirm(
+      pairedAssistant
+        ? 'Delete this prompt and its EduGuide response?'
+        : 'Delete this prompt?'
+    );
+    if (!confirmed) return;
+
+    const busyKey = `delete-${messageIndex}`;
+    setMessageActionBusy(busyKey);
+    setGlobalError('');
+
+    try {
+      const ids = [promptMessage.id, pairedAssistant?.id].filter(Boolean);
+
+      if (user && ids.length > 0) {
+        const headers = await getAuthHeaders(true);
+        const response = await fetch('/api/chat/messages', {
+          method: 'DELETE',
+          headers,
+          body: JSON.stringify({ messageIds: ids }),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Could not delete the prompt.');
+        }
+      }
+
+      setMessages((prev) =>
+        prev.filter((_, index) =>
+          pairedAssistant
+            ? index !== messageIndex && index !== messageIndex + 1
+            : index !== messageIndex
+        )
+      );
+
+      if (user?.id) {
+        await loadSessions(user.id, { force: true });
+      }
+    } catch (deleteError) {
+      setGlobalError(deleteError.message || 'Could not delete the prompt.');
+    } finally {
+      setMessageActionBusy('');
+    }
+  };
+
+  const regenerateResponse = async (assistantIndex) => {
+    const assistantMessage = messages[assistantIndex];
+    if (!assistantMessage || assistantMessage.role !== 'assistant') return;
+
+    let promptIndex = assistantIndex - 1;
+    while (promptIndex >= 0 && messages[promptIndex]?.role !== 'user') {
+      promptIndex -= 1;
+    }
+
+    const promptMessage = messages[promptIndex];
+    if (!promptMessage) {
+      setGlobalError('Could not find the prompt for this response.');
+      return;
+    }
+
+    const busyKey = `regenerate-${assistantIndex}`;
+    setMessageActionBusy(busyKey);
+    setGlobalError('');
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: promptMessage.text,
+          attachments: promptMessage.requestAttachments || [],
+          history: messages.slice(0, promptIndex).slice(-12).map((item) => ({
+            role: item.role,
+            text: item.text,
+          })),
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Could not regenerate the response.');
+      }
+
+      const nextText = payload.response?.trim();
+      if (!nextText) {
+        throw new Error('EduGuide returned an empty response.');
+      }
+
+      let regeneratedMessageId = assistantMessage.id || null;
+
+      if (user && assistantMessage.id) {
+        const headers = await getAuthHeaders(true);
+        const updateResponse = await fetch('/api/chat/messages', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            messageId: assistantMessage.id,
+            content: nextText,
+            feedback: null,
+          }),
+        });
+        const updatePayload = await updateResponse.json();
+
+        if (!updateResponse.ok) {
+          throw new Error(updatePayload.error || 'Could not save the regenerated response.');
+        }
+      } else if (user && currentSession?.id) {
+        const savedResponse = await saveMessage(currentSession.id, 'assistant', nextText);
+        regeneratedMessageId = savedResponse?.id || null;
+      }
+
+      setMessages((prev) =>
+        prev.map((item, index) =>
+          index === assistantIndex
+            ? {
+                ...item,
+                id: regeneratedMessageId || item.id,
+                text: nextText,
+                feedback: null,
+              }
+            : item
+        )
+      );
+      setExpandedReplies((prev) => ({ ...prev, [assistantIndex]: true }));
+    } catch (regenerateError) {
+      setGlobalError(regenerateError.message || 'Could not regenerate the response.');
+    } finally {
+      setMessageActionBusy('');
+    }
+  };
+
   const quickPrompts = [
     { icon: 'study', label: 'Study Tips', text: 'Can you provide effective study tips for students preparing for exams?' },
+    { icon: 'study', label: 'Practice Quiz', text: 'Create a short practice quiz for me with a mix of multiple-choice and fill-in-the-blank questions. Do not include the answers. I will attempt them first.' },
     { icon: 'career', label: 'Career Advice', text: 'What are career options for someone interested in technology and innovation?' },
     { icon: 'global', label: 'Global Opportunities', text: 'What are the best countries to study computer science abroad?' },
     { icon: 'resume', label: 'Resume Help', text: 'Can you help me write a professional resume for a software engineering role?' },
@@ -917,6 +1227,110 @@ export default function Prompt() {
   };
 
   const isLight = theme === 'light';
+  const latestAssistantIndex = messages.reduce(
+    (latest, item, index) => (item.role === 'assistant' ? index : latest),
+    -1
+  );
+
+  const renderMessageActions = (message, messageIndex) => {
+    const actionClass = `inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-[11px] transition ${
+      isLight
+        ? 'text-slate-500 hover:bg-violet-100 hover:text-violet-700'
+        : 'text-violet-100/55 hover:bg-violet-900/35 hover:text-violet-100'
+    }`;
+
+    if (message.role === 'user') {
+      const userActionClass = `inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-[11px] transition ${
+        isLight
+          ? 'text-white/75 hover:bg-white/15 hover:text-white'
+          : 'text-slate-900/65 hover:bg-slate-950/10 hover:text-slate-950'
+      }`;
+
+      return (
+        <div className="mt-2 flex items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={() => copyMessage(messageIndex)}
+            className={userActionClass}
+            title="Copy prompt"
+          >
+            <CopyIcon className="h-3.5 w-3.5" />
+            {copiedMessageIndex === messageIndex && <span>Copied</span>}
+          </button>
+          <button
+            type="button"
+            onClick={() => deletePromptAt(messageIndex)}
+            disabled={messageActionBusy === `delete-${messageIndex}`}
+            className={`${userActionClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            title="Delete prompt and its response"
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      );
+    }
+
+    const feedbackBusy = messageActionBusy === `feedback-${messageIndex}`;
+    const regenerateBusy = messageActionBusy === `regenerate-${messageIndex}`;
+
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-current/10 pt-2">
+        <button
+          type="button"
+          onClick={() => copyMessage(messageIndex)}
+          className={actionClass}
+          title="Copy response"
+        >
+          <CopyIcon className="h-3.5 w-3.5" />
+          {copiedMessageIndex === messageIndex && <span>Copied</span>}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMessageFeedback(messageIndex, 'like')}
+          disabled={feedbackBusy}
+          className={`${actionClass} ${
+            message.feedback === 'like'
+              ? isLight
+                ? 'bg-violet-100 text-violet-700'
+                : 'bg-violet-500/15 text-violet-100'
+              : ''
+          } disabled:cursor-not-allowed disabled:opacity-50`}
+          title="Helpful response"
+          aria-pressed={message.feedback === 'like'}
+        >
+          <ThumbsUpIcon className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setMessageFeedback(messageIndex, 'dislike')}
+          disabled={feedbackBusy}
+          className={`${actionClass} ${
+            message.feedback === 'dislike'
+              ? isLight
+                ? 'bg-violet-100 text-violet-700'
+                : 'bg-violet-500/15 text-violet-100'
+              : ''
+          } disabled:cursor-not-allowed disabled:opacity-50`}
+          title="Unhelpful response"
+          aria-pressed={message.feedback === 'dislike'}
+        >
+          <ThumbsDownIcon className="h-3.5 w-3.5" />
+        </button>
+        {messageIndex === latestAssistantIndex && (
+          <button
+            type="button"
+            onClick={() => regenerateResponse(messageIndex)}
+            disabled={regenerateBusy || loading}
+            className={`${actionClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            title="Regenerate latest response"
+          >
+            <RefreshIcon className={`h-3.5 w-3.5 ${regenerateBusy ? 'animate-spin' : ''}`} />
+            <span>{regenerateBusy ? 'Retrying' : 'Regenerate'}</span>
+          </button>
+        )}
+      </div>
+    );
+  };
 
   if (!isDesktop) {
     return (
@@ -953,6 +1367,82 @@ export default function Prompt() {
                 <span>{isLight ? 'Night' : 'Light'}</span>
               </span>
             </button>
+            {user && accountType === 'student' && (
+              <Link
+                href="/student-setup"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    : 'border-blue-300/30 bg-blue-900/20 text-blue-100 hover:bg-blue-900/35'
+                }`}
+              >
+                My section
+              </Link>
+            )}
+            {user && accountType === 'teacher' && userRole !== 'teacher' && (
+              <Link
+                href="/teacher-verification"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    : 'border-amber-300/30 bg-amber-900/20 text-amber-100 hover:bg-amber-900/35'
+                }`}
+              >
+                Verify teacher
+              </Link>
+            )}
+            {user && ['teacher', 'guidance', 'admin'].includes(userRole) && (
+              <Link
+                href="/dashboard"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-violet-300 bg-white text-violet-700 hover:bg-violet-100'
+                    : 'border-violet-300/30 bg-violet-900/35 text-violet-100 hover:border-violet-300/50 hover:bg-violet-900/55'
+                }`}
+              >
+                Dashboard
+              </Link>
+            )}
+
+            {user && accountType === 'student' && (
+              <Link
+                href="/student-setup"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    : 'border-blue-300/30 bg-blue-900/20 text-blue-100 hover:bg-blue-900/35'
+                }`}
+              >
+                My section
+              </Link>
+            )}
+
+            {user && accountType === 'teacher' && userRole !== 'teacher' && (
+              <Link
+                href="/teacher-verification"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    : 'border-amber-300/30 bg-amber-900/20 text-amber-100 hover:bg-amber-900/35'
+                }`}
+              >
+                Verify teacher
+              </Link>
+            )}
+
+            {user && ['teacher', 'guidance', 'admin'].includes(userRole) && (
+              <Link
+                href="/dashboard"
+                className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition sm:px-4 sm:text-sm ${
+                  isLight
+                    ? 'border-violet-300 bg-white text-violet-700 hover:bg-violet-100'
+                    : 'border-violet-300/30 bg-violet-900/35 text-violet-100 hover:border-violet-300/50 hover:bg-violet-900/55'
+                }`}
+              >
+                Dashboard
+              </Link>
+            )}
+
             {user ? (
               <button
                 onClick={async () => {
@@ -1138,6 +1628,7 @@ export default function Prompt() {
                             EduGuide
                           </p>
                           <div className="text-[13px] leading-6">{renderAssistantText(msg.text)}</div>
+                          {renderMessageActions(msg, i)}
                         </div>
                       </div>
                     ) : (
@@ -1147,6 +1638,7 @@ export default function Prompt() {
                         }`}
                       >
                         {msg.text}
+                        {renderMessageActions(msg, i)}
                         {Array.isArray(msg.attachments) && msg.attachments.length > 0 && (
                           <div className="mt-3 flex flex-wrap gap-2">
                             {msg.attachments.map((a, idx) =>
@@ -1328,6 +1820,11 @@ export default function Prompt() {
                   </div>
                 )}
 
+                <p className={`text-[11px] leading-5 ${
+                  isLight ? 'text-slate-500' : 'text-violet-100/55'
+                }`}>
+                  Quiz help mode: EduGuide gives hints and reasoning for assessment-style questions instead of revealing final answers.
+                </p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {quickPrompts.map((btn, i) => (
                     <button
@@ -1677,6 +2174,7 @@ export default function Prompt() {
                                   {isExpanded ? 'Show less' : 'Show more'}
                                 </button>
                               )}
+                              {renderMessageActions(msg, i)}
                             </>
                           );
                         })()}
@@ -1690,6 +2188,7 @@ export default function Prompt() {
                       style={{ animationDuration: '1.2s' }}
                     >
                       {msg.text}
+                      {renderMessageActions(msg, i)}
                       {Array.isArray(msg.attachments) && msg.attachments.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {msg.attachments.map((a, idx) =>
@@ -1894,7 +2393,12 @@ export default function Prompt() {
                   </div>
                 )}
 
-                <div className="grid w-full min-w-0 grid-cols-2 gap-1.5 sm:gap-2 xl:grid-cols-5">
+                <p className={`text-[11px] leading-5 sm:text-xs ${
+                  isLight ? 'text-slate-500' : 'text-violet-100/55'
+                }`}>
+                  Quiz help mode: EduGuide gives hints and reasoning for assessment-style questions instead of revealing final answers.
+                </p>
+                <div className="grid w-full min-w-0 grid-cols-2 gap-1.5 sm:gap-2 xl:grid-cols-6">
                   {quickPrompts.map((btn, i) => (
                     <button
                       key={i}
