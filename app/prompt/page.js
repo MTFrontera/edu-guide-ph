@@ -1649,7 +1649,7 @@ export default function Prompt() {
                       </div>
                     ) : (
                       <div
-                        className={`max-w-[92%] rounded-2xl p-3 text-[13px] shadow-sm ${
+                        className={`max-w-[92%] whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-2xl p-3 text-[13px] shadow-sm ${
                           isLight ? 'bg-violet-600 text-white' : 'bg-violet-400 text-slate-950'
                         }`}
                       >
@@ -2199,7 +2199,7 @@ export default function Prompt() {
                     </div>
                   ) : (
                     <div
-                      className={`max-w-[92%] md:max-w-[85%] rounded-2xl p-3 text-[13px] md:p-4 md:text-sm shadow-sm animate-fade-in ${
+                      className={`max-w-[92%] md:max-w-[85%] whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-2xl p-3 text-[13px] md:p-4 md:text-sm shadow-sm animate-fade-in ${
                         isLight ? 'bg-violet-600 text-white' : 'bg-violet-400 text-slate-950'
                       }`}
                       style={{ animationDuration: '1.2s' }}
