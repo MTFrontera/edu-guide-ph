@@ -37,7 +37,7 @@ export default function TeacherVerificationPage() {
     const [profileResult, schoolsResult, requestResult] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, email, first_name, last_name, role, account_type, school_id')
+        .select('id, email, first_name, last_name, role, account_type, school_id, employee_id')
         .eq('id', user.id)
         .maybeSingle(),
       supabase
@@ -73,7 +73,11 @@ export default function TeacherVerificationPage() {
         schoolsResult.data?.[0]?.id ||
         ''
     );
-    setEmployeeId(requestResult.data?.employee_id || '');
+    setEmployeeId(
+      requestResult.data?.employee_id ||
+        profileResult.data.employee_id ||
+        ''
+    );
 
     if (profileResult.data.account_type !== 'teacher') {
       setStatus('not-teacher');
@@ -162,6 +166,10 @@ export default function TeacherVerificationPage() {
         throw new Error('Your login session expired. Please sign in again.');
       }
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       const cleanName = documentFile.name
         .replace(/[^a-zA-Z0-9._-]/g, '_')
         .slice(-100);
@@ -185,7 +193,38 @@ export default function TeacherVerificationPage() {
 
       if (submitError) throw submitError;
 
-      setSuccess('Verification submitted. An EduGuide admin can now review your teacher account.');
+      let notificationSent = false;
+      let notificationMessage = '';
+
+      if (session?.access_token) {
+        try {
+          const notifyResponse = await fetch('/api/teacher-verification/notify', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          });
+
+          const notifyPayload = await notifyResponse.json();
+          notificationSent = Boolean(notifyPayload.sent);
+
+          if (!notifyResponse.ok || !notifyPayload.sent) {
+            notificationMessage =
+              notifyPayload.error ||
+              'The verification request was saved, but the admin email notification could not be sent yet.';
+          }
+        } catch (notifyError) {
+          notificationMessage =
+            notifyError.message ||
+            'The verification request was saved, but the admin email notification could not be sent yet.';
+        }
+      }
+
+      setSuccess(
+        notificationSent
+          ? 'Verification submitted. Your school administrator has been notified by email.'
+          : `Verification submitted and visible to the administrator dashboard. ${notificationMessage}`
+      );
       setDocumentFile(null);
       await loadData();
     } catch (submitError) {
@@ -276,7 +315,7 @@ export default function TeacherVerificationPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-200/70">Staff identity check</p>
               <h1 className="mt-1 text-3xl font-bold text-white">Verify your teacher account</h1>
               <p className="mt-3 max-w-2xl text-sm leading-7 text-violet-100/70">
-                Teacher access is not activated automatically. Submit school identification or employment proof, then an EduGuide admin reviews the request.
+                Teacher access is not activated automatically. Your teacher/employee ID comes from account creation. Upload school identification or employment proof here, then EduGuide notifies the administrator configured for your school to review the request.
               </p>
             </div>
           </div>
@@ -341,10 +380,18 @@ export default function TeacherVerificationPage() {
                   id="employeeId"
                   value={employeeId}
                   onChange={(e) => setEmployeeId(e.target.value)}
+                  readOnly={Boolean(profile?.employee_id)}
                   placeholder="Enter the ID shown on your school identification"
-                  className="w-full rounded-xl border border-violet-300/30 bg-slate-950/65 px-4 py-3 text-sm text-white placeholder-violet-100/40 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-400/40"
+                  className={`w-full rounded-xl border border-violet-300/30 bg-slate-950/65 px-4 py-3 text-sm text-white placeholder-violet-100/40 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-400/40 ${
+                    profile?.employee_id ? 'cursor-not-allowed opacity-80' : ''
+                  }`}
                   required
                 />
+                <p className="mt-2 text-xs leading-5 text-violet-100/55">
+                  {profile?.employee_id
+                    ? 'This ID was recorded when the teacher account was created.'
+                    : 'This is an older test account, so enter the teacher/employee ID once here. New teacher accounts collect it during signup.'}
+                </p>
               </div>
 
               <div>
