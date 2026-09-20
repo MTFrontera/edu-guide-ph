@@ -40,8 +40,11 @@ export default function DashboardPage() {
   const [reviewNotes, setReviewNotes] = useState({});
   const [reviewMessage, setReviewMessage] = useState('');
   const [sectionForm, setSectionForm] = useState({ schoolId: '', name: '', gradeYear: '' });
+  const [courseForm, setCourseForm] = useState({ schoolId: '', name: '' });
   const [sectionActionBusy, setSectionActionBusy] = useState('');
   const [sectionMessage, setSectionMessage] = useState('');
+  const [courseActionBusy, setCourseActionBusy] = useState('');
+  const [courseMessage, setCourseMessage] = useState('');
   const [schoolAdminDrafts, setSchoolAdminDrafts] = useState({});
 
   useEffect(() => {
@@ -223,6 +226,95 @@ export default function DashboardPage() {
       setSectionMessage(sectionError.message || 'Could not create section.');
     } finally {
       setSectionActionBusy('');
+    }
+  };
+
+  const createCourse = async () => {
+    const schoolId =
+      courseForm.schoolId ||
+      data?.sectionManagement?.schools?.[0]?.id ||
+      '';
+
+    if (!schoolId || !courseForm.name.trim()) {
+      setSectionMessage('Choose a school and enter a course or subject name.');
+      return;
+    }
+
+    setSectionActionBusy('create-course');
+    setSectionMessage('');
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const response = await fetch('/api/sections', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.access_token || ''}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'create-course',
+          schoolId,
+          name: courseForm.name.trim(),
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Could not create course or subject.');
+      }
+
+      setCourseForm((current) => ({ ...current, name: '' }));
+      setSectionMessage('Course or subject added to the school list.');
+      await refreshDashboardData();
+    } catch (courseError) {
+      setSectionMessage(courseError.message || 'Could not create course or subject.');
+    } finally {
+      setSectionActionBusy('');
+    }
+  };
+
+  const setMyCourse = async (courseId, selected) => {
+    if (!courseId) return;
+
+    setCourseActionBusy(courseId);
+    setCourseMessage('');
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const response = await fetch('/api/sections', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.access_token || ''}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'set-my-course',
+          courseId,
+          selected,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Could not update your courses.');
+      }
+
+      setCourseMessage(
+        selected
+          ? 'Course added to your teaching profile.'
+          : 'Course removed from your teaching profile.'
+      );
+      await refreshDashboardData();
+    } catch (courseError) {
+      setCourseMessage(courseError.message || 'Could not update your courses.');
+    } finally {
+      setCourseActionBusy('');
     }
   };
 
@@ -421,6 +513,52 @@ export default function DashboardPage() {
             </p>
           </section>
 
+          <section className="rounded-3xl border border-fuchsia-300/20 bg-fuchsia-950/10 p-6 shadow-xl sm:p-8">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fuchsia-200/70">Teaching profile</p>
+                <h2 className="mt-2 text-2xl font-bold text-white">My courses / subjects</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-fuchsia-50/65">
+                  Your school administrator controls the available list. Select every course or subject you currently teach; you can choose more than one.
+                </p>
+              </div>
+              <span className="rounded-full border border-fuchsia-300/20 bg-slate-950/30 px-3 py-1 text-xs font-semibold text-fuchsia-100">
+                {(data?.teacherCourseCatalog || []).filter((course) => course.selected).length} selected
+              </span>
+            </div>
+
+            {courseMessage && (
+              <div className="mt-4 rounded-xl border border-fuchsia-300/20 bg-slate-950/30 px-4 py-3 text-sm text-fuchsia-50">
+                {courseMessage}
+              </div>
+            )}
+
+            {(data?.teacherCourseCatalog || []).length === 0 ? (
+              <div className="mt-5 rounded-2xl border border-dashed border-fuchsia-300/20 px-5 py-7 text-center text-sm text-fuchsia-50/55">
+                No courses or subjects have been added by the school administrator yet.
+              </div>
+            ) : (
+              <div className="mt-5 flex flex-wrap gap-2">
+                {(data?.teacherCourseCatalog || []).map((course) => (
+                  <button
+                    key={course.id}
+                    onClick={() => setMyCourse(course.id, !course.selected)}
+                    disabled={courseActionBusy === course.id}
+                    className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
+                      course.selected
+                        ? 'border-fuchsia-200/40 bg-fuchsia-300 text-slate-950'
+                        : 'border-fuchsia-300/20 bg-slate-950/35 text-fuchsia-50 hover:bg-fuchsia-950/30'
+                    }`}
+                  >
+                    {courseActionBusy === course.id
+                      ? 'Saving...'
+                      : `${course.selected ? '✓ ' : '+ '}${course.name}`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section className="grid gap-5 lg:grid-cols-2">
             <Link
               href="/prompt"
@@ -572,7 +710,7 @@ export default function DashboardPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200/75">School structure</p>
               <h2 className="mt-2 text-2xl font-bold text-white">Sections & teacher assignments</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-blue-50/65">
-                Create the real school sections here, then assign verified teachers only to the sections they actually handle.
+                Create the real school sections here, then assign one or more verified teachers to each section. Teachers choose their own courses from the school-approved list.
               </p>
             </div>
 
@@ -620,6 +758,70 @@ export default function DashboardPage() {
                   </button>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-6 border-t border-blue-300/10 pt-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100/60">
+                Courses / subjects
+              </p>
+              <p className="mt-2 text-sm leading-6 text-blue-50/55">
+                Maintain the school's approved course list here. Verified teachers choose one or more of these courses for their own teaching profile.
+              </p>
+            </div>
+
+            <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1.5fr_auto]">
+              <select
+                value={courseForm.schoolId || data?.sectionManagement?.schools?.[0]?.id || ''}
+                onChange={(event) =>
+                  setCourseForm((current) => ({ ...current, schoolId: event.target.value }))
+                }
+                className="rounded-xl border border-blue-300/20 bg-slate-950/55 px-3 py-2.5 text-sm text-white outline-none"
+              >
+                {(data?.sectionManagement?.schools || []).map((school) => (
+                  <option key={school.id} value={school.id}>{school.name}</option>
+                ))}
+              </select>
+              <input
+                value={courseForm.name}
+                onChange={(event) =>
+                  setCourseForm((current) => ({ ...current, name: event.target.value }))
+                }
+                placeholder="Course / subject name (e.g. Mathematics)"
+                className="rounded-xl border border-blue-300/20 bg-slate-950/55 px-3 py-2.5 text-sm text-white placeholder-blue-100/35 outline-none"
+              />
+              <button
+                onClick={createCourse}
+                disabled={sectionActionBusy === 'create-course'}
+                className="rounded-xl bg-blue-300 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-blue-200 disabled:opacity-50"
+              >
+                {sectionActionBusy === 'create-course' ? 'Adding...' : 'Add course'}
+              </button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(data?.sectionManagement?.courses || [])
+                .filter(
+                  (course) =>
+                    course.schoolId ===
+                    (courseForm.schoolId || data?.sectionManagement?.schools?.[0]?.id || '')
+                )
+                .map((course) => (
+                  <span
+                    key={course.id}
+                    className="rounded-full border border-blue-300/20 bg-blue-950/20 px-3 py-1.5 text-xs text-blue-50"
+                  >
+                    {course.name}
+                  </span>
+                ))}
+              {(data?.sectionManagement?.courses || []).filter(
+                (course) =>
+                  course.schoolId ===
+                  (courseForm.schoolId || data?.sectionManagement?.schools?.[0]?.id || '')
+              ).length === 0 && (
+                <span className="text-xs text-blue-100/45">
+                  No courses or subjects configured for this school yet.
+                </span>
+              )}
             </div>
 
             <div className="mt-6 border-t border-blue-300/10 pt-6">
@@ -688,17 +890,27 @@ export default function DashboardPage() {
                       <p className="text-xs font-semibold uppercase tracking-wider text-blue-100/55">Assigned teachers</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {(section.teachers || []).map((teacher) => (
-                          <span key={teacher.id} className="inline-flex items-center gap-2 rounded-full border border-blue-300/20 bg-blue-950/20 px-3 py-1.5 text-xs text-blue-50">
-                            {teacher.name || teacher.email}
+                          <div
+                            key={teacher.id}
+                            className="inline-flex items-center gap-2 rounded-xl border border-blue-300/20 bg-blue-950/20 px-3 py-2 text-xs text-blue-50"
+                          >
+                            <div>
+                              <p className="font-semibold text-white">{teacher.name || teacher.email}</p>
+                              <p className="mt-0.5 text-[11px] text-blue-100/55">
+                                {(teacher.courses || []).length > 0
+                                  ? (teacher.courses || []).map((course) => course.name).join(', ')
+                                  : 'No courses selected yet'}
+                              </p>
+                            </div>
                             <button
                               onClick={() => setTeacherSection(teacher.id, section.id, false)}
                               disabled={Boolean(sectionActionBusy)}
-                              className="font-bold text-rose-200 hover:text-rose-100 disabled:opacity-50"
+                              className="ml-1 font-bold text-rose-200 hover:text-rose-100 disabled:opacity-50"
                               title="Remove teacher from this section"
                             >
                               ×
                             </button>
-                          </span>
+                          </div>
                         ))}
                         {(section.teachers || []).length === 0 && (
                           <span className="text-xs text-blue-100/45">No teacher assigned.</span>
@@ -719,10 +931,17 @@ export default function DashboardPage() {
                           }}
                           className="w-full rounded-xl border border-blue-300/20 bg-slate-950/55 px-3 py-2 text-sm text-white outline-none"
                         >
-                          <option value="">Assign a verified teacher...</option>
+                          <option value="">
+                            {(section.teachers || []).length > 0
+                              ? 'Add another verified teacher...'
+                              : 'Assign a verified teacher...'}
+                          </option>
                           {availableTeachers.map((teacher) => (
                             <option key={teacher.id} value={teacher.id}>
                               {teacher.name || teacher.email}
+                              {(teacher.courses || []).length > 0
+                                ? ` — ${(teacher.courses || []).map((course) => course.name).join(', ')}`
+                                : ' — no courses selected yet'}
                             </option>
                           ))}
                         </select>
