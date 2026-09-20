@@ -363,14 +363,42 @@ export default function Prompt() {
       }
 
       if (data.messages) {
-        setMessages(
-          data.messages.map((msg) => ({
-            id: msg.id,
-            role: msg.role,
-            text: msg.content,
-            feedback: msg.feedback || null,
-          }))
-        );
+        const loadedMessages = data.messages.map((msg) => ({
+          id: msg.id,
+          role: msg.role,
+          text: msg.content,
+          feedback: msg.feedback || null,
+        }));
+
+        setMessages(loadedMessages);
+
+        if (loadedMessages.some((msg) => msg.role === 'assistant')) {
+          try {
+            const suggestionResponse = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                suggestionsOnly: true,
+                history: loadedMessages.slice(-12).map((item) => ({
+                  role: item.role,
+                  text: item.text,
+                  feedback: item.feedback || null,
+                })),
+              }),
+            });
+
+            const suggestionPayload = await suggestionResponse.json();
+            if (suggestionResponse.ok && Array.isArray(suggestionPayload.suggestions)) {
+              setContextPrompts(
+                suggestionPayload.suggestions
+                  .filter((item) => item?.label && item?.text)
+                  .slice(0, 6)
+              );
+            }
+          } catch (suggestionError) {
+            console.warn('Could not refresh contextual suggestions:', suggestionError);
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading messages:', error);
