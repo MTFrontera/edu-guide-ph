@@ -36,6 +36,27 @@ Practice-question generation:
 - Invite the student to attempt the questions and offer hints or reasoning support afterward without directly revealing final answers.
 `.trim();
 
+function looksLikeAssessmentRequest(message, textAttachments = [], imageAttachments = []) {
+  const attachmentText = textAttachments
+    .map((item) => String(item?.content || ''))
+    .join('\n');
+
+  const combined = `${String(message || '')}\n${attachmentText}`.toLowerCase();
+
+  const explicitAssessmentTerms =
+    /(multiple[ -]?choice|fill[ -]?in[ -]?the[ -]?blank|true\s*(?:or|\/)\s*false|matching type|quiz|exam|test item|worksheet|answer key|choose the correct|which of the following)/i;
+
+  const optionPattern = /(?:^|\n)\s*[a-d][\.)]\s+\S+/im;
+  const blankPattern = /_{3,}|\bblank\b|\[\s*blank\s*\]/i;
+
+  return (
+    explicitAssessmentTerms.test(combined) ||
+    optionPattern.test(`${message || ''}\n${attachmentText}`) ||
+    blankPattern.test(combined) ||
+    imageAttachments.length > 0 && /(answer|question|quiz|exam|worksheet|solve)/i.test(combined)
+  );
+}
+
 function buildImagePart(attachment) {
   const dataUrl = String(attachment?.dataUrl || '');
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -113,11 +134,22 @@ export async function POST(request) {
           .join('\n\n')}`
       : '';
 
+    const assessmentMode = looksLikeAssessmentRequest(
+      cleanMessage,
+      textAttachments,
+      imageAttachments
+    );
+
+    const assessmentReminder = assessmentMode
+      ? '\n\n[ASSESSMENT HELP MODE: Do not reveal the final answer, answer choice, missing word, or answer key. Tutor the student with concepts, hints, reasoning steps, and guiding questions only.]'
+      : '';
+
     const userParts = [
       {
         text:
           `${cleanMessage || 'Please analyze the attached material and explain the key points clearly.'}` +
-          textAttachmentBlock,
+          textAttachmentBlock +
+          assessmentReminder,
       },
       ...imageAttachments.map(buildImagePart).filter(Boolean),
     ];
@@ -183,6 +215,7 @@ export async function POST(request) {
     return Response.json({
       response: aiResponse,
       model,
+      mode: assessmentMode ? 'assessment-help' : 'general',
     });
   } catch (error) {
     console.error('Chat API Error:', error);
