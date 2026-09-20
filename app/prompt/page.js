@@ -1217,6 +1217,104 @@ export default function Prompt() {
   };
 
   const isLight = theme === 'light';
+  const latestAssistantIndex = messages.reduce(
+    (latest, item, index) => (item.role === 'assistant' ? index : latest),
+    -1
+  );
+
+  const renderMessageActions = (message, messageIndex) => {
+    const actionClass = `inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-[11px] transition ${
+      isLight
+        ? 'text-slate-500 hover:bg-violet-100 hover:text-violet-700'
+        : 'text-violet-100/55 hover:bg-violet-900/35 hover:text-violet-100'
+    }`;
+
+    if (message.role === 'user') {
+      return (
+        <div className="mt-2 flex items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={() => copyMessage(messageIndex)}
+            className={actionClass}
+            title="Copy prompt"
+          >
+            <CopyIcon className="h-3.5 w-3.5" />
+            {copiedMessageIndex === messageIndex && <span>Copied</span>}
+          </button>
+          <button
+            type="button"
+            onClick={() => deletePromptAt(messageIndex)}
+            disabled={messageActionBusy === `delete-${messageIndex}`}
+            className={`${actionClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            title="Delete prompt and its response"
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      );
+    }
+
+    const feedbackBusy = messageActionBusy === `feedback-${messageIndex}`;
+    const regenerateBusy = messageActionBusy === `regenerate-${messageIndex}`;
+
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-current/10 pt-2">
+        <button
+          type="button"
+          onClick={() => copyMessage(messageIndex)}
+          className={actionClass}
+          title="Copy response"
+        >
+          <CopyIcon className="h-3.5 w-3.5" />
+          {copiedMessageIndex === messageIndex && <span>Copied</span>}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMessageFeedback(messageIndex, 'like')}
+          disabled={feedbackBusy}
+          className={`${actionClass} ${
+            message.feedback === 'like'
+              ? isLight
+                ? 'bg-violet-100 text-violet-700'
+                : 'bg-violet-500/15 text-violet-100'
+              : ''
+          } disabled:cursor-not-allowed disabled:opacity-50`}
+          title="Helpful response"
+          aria-pressed={message.feedback === 'like'}
+        >
+          <ThumbsUpIcon className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setMessageFeedback(messageIndex, 'dislike')}
+          disabled={feedbackBusy}
+          className={`${actionClass} ${
+            message.feedback === 'dislike'
+              ? isLight
+                ? 'bg-violet-100 text-violet-700'
+                : 'bg-violet-500/15 text-violet-100'
+              : ''
+          } disabled:cursor-not-allowed disabled:opacity-50`}
+          title="Unhelpful response"
+          aria-pressed={message.feedback === 'dislike'}
+        >
+          <ThumbsDownIcon className="h-3.5 w-3.5" />
+        </button>
+        {messageIndex === latestAssistantIndex && (
+          <button
+            type="button"
+            onClick={() => regenerateResponse(messageIndex)}
+            disabled={regenerateBusy || loading}
+            className={`${actionClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            title="Regenerate latest response"
+          >
+            <RefreshIcon className={`h-3.5 w-3.5 ${regenerateBusy ? 'animate-spin' : ''}`} />
+            <span>{regenerateBusy ? 'Retrying' : 'Regenerate'}</span>
+          </button>
+        )}
+      </div>
+    );
+  };
 
   if (!isDesktop) {
     return (
@@ -1463,6 +1561,7 @@ export default function Prompt() {
                             EduGuide
                           </p>
                           <div className="text-[13px] leading-6">{renderAssistantText(msg.text)}</div>
+                          {renderMessageActions(msg, i)}
                         </div>
                       </div>
                     ) : (
@@ -1472,6 +1571,7 @@ export default function Prompt() {
                         }`}
                       >
                         {msg.text}
+                        {renderMessageActions(msg, i)}
                         {Array.isArray(msg.attachments) && msg.attachments.length > 0 && (
                           <div className="mt-3 flex flex-wrap gap-2">
                             {msg.attachments.map((a, idx) =>
@@ -2002,6 +2102,7 @@ export default function Prompt() {
                                   {isExpanded ? 'Show less' : 'Show more'}
                                 </button>
                               )}
+                              {renderMessageActions(msg, i)}
                             </>
                           );
                         })()}
@@ -2015,6 +2116,7 @@ export default function Prompt() {
                       style={{ animationDuration: '1.2s' }}
                     >
                       {msg.text}
+                      {renderMessageActions(msg, i)}
                       {Array.isArray(msg.attachments) && msg.attachments.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {msg.attachments.map((a, idx) =>
