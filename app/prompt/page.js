@@ -909,8 +909,200 @@ export default function Prompt() {
     }
   };
 
+  const copyMessage = async (messageIndex) => {
+    const message = messages[messageIndex];
+    if (!message?.text || typeof navigator === 'undefined' || !navigator.clipboard) return;
+
+    try {
+      await navigator.clipboard.writeText(message.text);
+      setCopiedMessageIndex(messageIndex);
+      setTimeout(() => {
+        setCopiedMessageIndex((current) => (current === messageIndex ? null : current));
+      }, 1400);
+    } catch (copyError) {
+      console.error('Copy message error:', copyError);
+      setGlobalError('Could not copy that message.');
+    }
+  };
+
+  const setMessageFeedback = async (messageIndex, nextFeedback) => {
+    const message = messages[messageIndex];
+    if (!message || message.role !== 'assistant') return;
+
+    const feedback = message.feedback === nextFeedback ? null : nextFeedback;
+    const busyKey = `feedback-${messageIndex}`;
+    setMessageActionBusy(busyKey);
+    setGlobalError('');
+
+    setMessages((prev) =>
+      prev.map((item, index) =>
+        index === messageIndex ? { ...item, feedback } : item
+      )
+    );
+
+    try {
+      if (user && message.id) {
+        const headers = await getAuthHeaders(true);
+        const response = await fetch('/api/chat/messages', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            messageId: message.id,
+            feedback,
+          }),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Could not save feedback.');
+        }
+      }
+    } catch (feedbackError) {
+      setMessages((prev) =>
+        prev.map((item, index) =>
+          index === messageIndex ? { ...item, feedback: message.feedback || null } : item
+        )
+      );
+      setGlobalError(feedbackError.message || 'Could not save feedback.');
+    } finally {
+      setMessageActionBusy('');
+    }
+  };
+
+  const deletePromptAt = async (messageIndex) => {
+    const promptMessage = messages[messageIndex];
+    if (!promptMessage || promptMessage.role !== 'user') return;
+
+    const pairedAssistant =
+      messages[messageIndex + 1]?.role === 'assistant'
+        ? messages[messageIndex + 1]
+        : null;
+
+    const confirmed = window.confirm(
+      pairedAssistant
+        ? 'Delete this prompt and its EduGuide response?'
+        : 'Delete this prompt?'
+    );
+    if (!confirmed) return;
+
+    const busyKey = `delete-${messageIndex}`;
+    setMessageActionBusy(busyKey);
+    setGlobalError('');
+
+    try {
+      const ids = [promptMessage.id, pairedAssistant?.id].filter(Boolean);
+
+      if (user && ids.length > 0) {
+        const headers = await getAuthHeaders(true);
+        const response = await fetch('/api/chat/messages', {
+          method: 'DELETE',
+          headers,
+          body: JSON.stringify({ messageIds: ids }),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Could not delete the prompt.');
+        }
+      }
+
+      setMessages((prev) =>
+        prev.filter((_, index) =>
+          pairedAssistant
+            ? index !== messageIndex && index !== messageIndex + 1
+            : index !== messageIndex
+        )
+      );
+
+      if (user?.id) {
+        await loadSessions(user.id, { force: true });
+      }
+    } catch (deleteError) {
+      setGlobalError(deleteError.message || 'Could not delete the prompt.');
+    } finally {
+      setMessageActionBusy('');
+    }
+  };
+
+  const regenerateResponse = async (assistantIndex) => {
+    const assistantMessage = messages[assistantIndex];
+    if (!assistantMessage || assistantMessage.role !== 'assistant') return;
+
+    let promptIndex = assistantIndex - 1;
+    while (promptIndex >= 0 && messages[promptIndex]?.role !== 'user') {
+      promptIndex -= 1;
+    }
+
+    const promptMessage = messages[promptIndex];
+    if (!promptMessage) {
+      setGlobalError('Could not find the prompt for this response.');
+      return;
+    }
+
+    const busyKey = `regenerate-${assistantIndex}`;
+    setMessageActionBusy(busyKey);
+    setGlobalError('');
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: promptMessage.text,
+          attachments: promptMessage.requestAttachments || [],
+          history: messages.slice(0, promptIndex).slice(-12).map((item) => ({
+            role: item.role,
+            text: item.text,
+          })),
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Could not regenerate the response.');
+      }
+
+      const nextText = payload.response?.trim();
+      if (!nextText) {
+        throw new Error('EduGuide returned an empty response.');
+      }
+
+      if (user && assistantMessage.id) {
+        const headers = await getAuthHeaders(true);
+        const updateResponse = await fetch('/api/chat/messages', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            messageId: assistantMessage.id,
+            content: nextText,
+            feedback: null,
+          }),
+        });
+        const updatePayload = await updateResponse.json();
+
+        if (!updateResponse.ok) {
+          throw new Error(updatePayload.error || 'Could not save the regenerated response.');
+        }
+      }
+
+      setMessages((prev) =>
+        prev.map((item, index) =>
+          index === assistantIndex
+            ? { ...item, text: nextText, feedback: null }
+            : item
+        )
+      );
+      setExpandedReplies((prev) => ({ ...prev, [assistantIndex]: true }));
+    } catch (regenerateError) {
+      setGlobalError(regenerateError.message || 'Could not regenerate the response.');
+    } finally {
+      setMessageActionBusy('');
+    }
+  };
+
   const quickPrompts = [
     { icon: 'study', label: 'Study Tips', text: 'Can you provide effective study tips for students preparing for exams?' },
+    { icon: 'study', label: 'Practice Quiz', text: 'Create a short practice quiz for me with a mix of multiple-choice and fill-in-the-blank questions. Do not include the answers. I will attempt them first.' },
     { icon: 'career', label: 'Career Advice', text: 'What are career options for someone interested in technology and innovation?' },
     { icon: 'global', label: 'Global Opportunities', text: 'What are the best countries to study computer science abroad?' },
     { icon: 'resume', label: 'Resume Help', text: 'Can you help me write a professional resume for a software engineering role?' },
@@ -2027,7 +2219,7 @@ export default function Prompt() {
                   </div>
                 )}
 
-                <div className="grid w-full min-w-0 grid-cols-2 gap-1.5 sm:gap-2 xl:grid-cols-5">
+                <div className="grid w-full min-w-0 grid-cols-2 gap-1.5 sm:gap-2 xl:grid-cols-6">
                   {quickPrompts.map((btn, i) => (
                     <button
                       key={i}
