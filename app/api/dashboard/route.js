@@ -114,9 +114,13 @@ export async function GET(request) {
     }
 
     let teacherVerifications = [];
+    let sectionManagement = null;
 
     if (profile.role === 'admin') {
-      const queueResult = await supabase.rpc('admin_teacher_verification_queue');
+      const [queueResult, sectionResult] = await Promise.all([
+        supabase.rpc('admin_teacher_verification_queue'),
+        supabase.rpc('admin_section_management'),
+      ]);
 
       if (queueResult.error) {
         const normalized = normalizeRpcError(queueResult.error);
@@ -125,6 +129,20 @@ export async function GET(request) {
           { status: normalized.status }
         );
       }
+
+      if (sectionResult.error) {
+        const normalized = normalizeRpcError(sectionResult.error);
+        return Response.json(
+          { error: normalized.message },
+          { status: normalized.status }
+        );
+      }
+
+      sectionManagement = sectionResult.data || {
+        sections: [],
+        teachers: [],
+        schools: [],
+      };
 
       teacherVerifications = await Promise.all(
         (queueResult.data || []).map(async (item) => {
@@ -146,6 +164,7 @@ export async function GET(request) {
       recentActivity: activityResult.data || [],
       usage: usageResult.data || [],
       teacherSections: [],
+      sectionManagement,
       teacherVerifications,
       privacy: {
         messageContentIncluded: false,
