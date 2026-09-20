@@ -98,6 +98,148 @@ function extractText(data) {
     .trim();
 }
 
+const SUGGESTION_ICONS = new Set([
+  'study',
+  'career',
+  'global',
+  'resume',
+  'scholarship',
+]);
+
+function normalizeSuggestions(rawText) {
+  const cleaned = String(rawText || '')
+    .trim()
+    .replace(/^\`\`\`(?:json)?\s*/i, '')
+    .replace(/\s*\`\`\`$/i, '');
+
+  if (!cleaned) return [];
+
+  try {
+    const parsed = JSON.parse(cleaned);
+    const items = Array.isArray(parsed) ? parsed : parsed?.suggestions;
+
+    if (!Array.isArray(items)) return [];
+
+    return items
+      .map((item) => {
+        const label = String(item?.label || '').trim().slice(0, 34);
+        const text = String(item?.text || '').trim().slice(0, 260);
+        const requestedIcon = String(item?.icon || '').trim().toLowerCase();
+        const icon = SUGGESTION_ICONS.has(requestedIcon)
+          ? requestedIcon
+          : 'study';
+
+        if (!label || !text) return null;
+        return { label, text, icon };
+      })
+      .filter(Boolean)
+      .slice(0, 6);
+  } catch {
+    return [];
+  }
+}
+
+async function generateFollowUpSuggestions({
+  apiKey,
+  model,
+  history,
+  userMessage,
+  assistantResponse,
+  assessmentMode,
+}) {
+  const recentContext = Array.isArray(history)
+    ? history
+        .slice(-6)
+        .map((item) => `${item?.role === 'assistant' ? 'EduGuide' : 'Student'}: ${String(
+          item?.text || item?.content || ''
+        )
+          .trim()
+          .slice(0, 1200)}`)
+        .filter((line) => !line.endsWith(': '))
+        .join('\n')
+    : '';
+
+  const assessmentInstruction = assessmentMode
+    ? `
+This is an assessment-help conversation. Suggestions MUST support learning without asking for or revealing the final answer. Prefer actions such as explaining the concept, giving a hint, showing the method, eliminating clearly inconsistent choices, or creating a similar practice question.`
+    : '';
+
+  const suggestionPrompt = `
+Create 5 short, clickable follow-up suggestions for the student's current EduGuide conversation.
+
+Requirements:
+- Suggestions must be directly relevant to the CURRENT topic, not generic menu items.
+- Each suggestion needs a short button label and a self-contained prompt EduGuide can send when clicked.
+- Keep labels concise (ideally 2-5 words, maximum 34 characters).
+- Do not repeat the same idea in different wording.
+- Preserve the student's current topic and level.
+- Use one icon value from: study, career, global, resume, scholarship.
+- If the conversation topic changes, suggestions should follow the newest topic.
+- Never invent school-specific facts.
+${assessmentInstruction}
+
+Recent conversation:
+${recentContext || '(No earlier messages)'}
+
+Latest student message:
+${String(userMessage || '').slice(0, 2200)}
+
+Latest EduGuide response:
+${String(assistantResponse || '').slice(0, 2800)}
+
+Return ONLY valid JSON in this exact shape:
+[
+  {"label":"Short label","text":"Prompt to send when clicked","icon":"study"}
+]
+`.trim();
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        model
+      )}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [
+              {
+                text:
+                  'You generate concise, context-aware EduGuide follow-up buttons. Return JSON only.',
+              },
+            ],
+          },
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: suggestionPrompt }],
+            },
+          ],
+          generationConfig: {
+            maxOutputTokens: 420,
+            temperature: 0.35,
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.warn('Follow-up suggestion generation failed:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    return normalizeSuggestions(extractText(data));
+  } catch (error) {
+    console.warn('Follow-up suggestion generation error:', error?.message || error);
+    return [];
+  }
+}
+
 export async function POST(request) {
   try {
     const { message, attachments = [], history = [] } = await request.json();
@@ -212,10 +354,20 @@ export async function POST(request) {
       );
     }
 
+    const suggestions = await generateFollowUpSuggestions({
+      apiKey,
+      model,
+      history,
+      userMessage: cleanMessage,
+      assistantResponse: aiResponse,
+      assessmentMode,
+    });
+
     return Response.json({
       response: aiResponse,
       model,
       mode: assessmentMode ? 'assessment-help' : 'general',
+      suggestions,
     });
   } catch (error) {
     console.error('Chat API Error:', error);
