@@ -170,6 +170,7 @@ export async function POST(request) {
       const teacherId = String(body?.teacherId || '').trim();
       const sectionId = String(body?.sectionId || '').trim();
       const assigned = Boolean(body?.assigned);
+      const courseLabel = String(body?.courseLabel || '').trim();
 
       if (!teacherId || !sectionId) {
         return Response.json(
@@ -178,10 +179,18 @@ export async function POST(request) {
         );
       }
 
+      if (assigned && !courseLabel) {
+        return Response.json(
+          { error: 'Course or subject is required when assigning a teacher.' },
+          { status: 400 }
+        );
+      }
+
       const { error } = await supabase.rpc('admin_set_teacher_section', {
         p_teacher_id: teacherId,
         p_section_id: sectionId,
         p_assigned: assigned,
+        p_course_label: assigned ? courseLabel : null,
       });
 
       if (error) throw error;
