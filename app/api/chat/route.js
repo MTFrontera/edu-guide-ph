@@ -34,6 +34,12 @@ Practice-question generation:
 - Prefer a useful mix of multiple-choice, fill-in-the-blank, short-answer, and scenario questions when appropriate.
 - Do not include the answers or an answer key in the same response.
 - Invite the student to attempt the questions and offer hints or reasoning support afterward without directly revealing final answers.
+
+Feedback adaptation:
+- A thumbs-up or thumbs-down on a previous EduGuide reply is a soft signal about usefulness and presentation, not a statement that the reply was factually correct or incorrect.
+- When feedback context is provided, preserve useful presentation patterns from liked replies and try a meaningfully different explanation style, level of detail, structure, or examples after disliked replies.
+- Never let feedback weaken the assessment-help rule, privacy rules, factual accuracy, or other system requirements.
+- Do not infer unrelated personal preferences from a single like or dislike.
 `.trim();
 
 function looksLikeAssessmentRequest(message, textAttachments = [], imageAttachments = []) {
@@ -98,6 +104,106 @@ function extractText(data) {
     .trim();
 }
 
+function buildFeedbackGuidance(history) {
+  if (!Array.isArray(history)) return '';
+
+  const rated = history
+    .filter(
+      (item) =>
+        item?.role === 'assistant' &&
+        (item?.feedback === 'like' || item?.feedback === 'dislike')
+    )
+    .slice(-4);
+
+  if (rated.length === 0) return '';
+
+  const signals = rated
+    .map((item) => {
+      const label = item.feedback === 'like' ? 'LIKED' : 'DISLIKED';
+      const excerpt = String(item?.text || item?.content || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 700);
+
+      return excerpt ? `- ${label}: "${excerpt}"` : null;
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  if (!signals) return '';
+
+  return `
+Student feedback from earlier EduGuide replies in THIS chat:
+${signals}
+
+Use these only as soft presentation/usefulness signals:
+- For LIKED replies, preserve useful traits such as clarity, structure, amount of detail, examples, or tone when they fit the new question.
+- For DISLIKED replies, do not merely repeat the same presentation. Try a noticeably different explanation approach, structure, level of detail, or example.
+- Do not assume a liked reply was factually correct or a disliked reply was factually wrong.
+- Current question, evidence, factual accuracy, privacy, and assessment-help rules always take priority.
+`.trim();
+}
+
+function buildFallbackSuggestions(assessmentMode) {
+  if (assessmentMode) {
+    return [
+      {
+        icon: 'study',
+        label: 'Explain the Concept',
+        text: 'Explain the concept behind my current question without revealing the final answer.',
+      },
+      {
+        icon: 'study',
+        label: 'Give Me a Hint',
+        text: 'Give me one useful hint for the current question without telling me the final answer.',
+      },
+      {
+        icon: 'study',
+        label: 'Eliminate Choices',
+        text: 'Help me identify which choices are clearly inconsistent and explain why, without revealing the final answer.',
+      },
+      {
+        icon: 'study',
+        label: 'Similar Practice',
+        text: 'Create a similar practice question on the same topic, but do not include the answer.',
+      },
+      {
+        icon: 'study',
+        label: 'What Should I Review?',
+        text: 'Tell me which ideas I should review to solve the current question by myself.',
+      },
+    ];
+  }
+
+  return [
+    {
+      icon: 'study',
+      label: 'Explain More',
+      text: 'Explain the current topic in more depth while staying focused on what we are discussing.',
+    },
+    {
+      icon: 'study',
+      label: 'Simpler Version',
+      text: 'Explain the current topic again in simpler terms with a clear example.',
+    },
+    {
+      icon: 'study',
+      label: 'Give an Example',
+      text: 'Give me a practical example of the current topic and walk me through it.',
+    },
+    {
+      icon: 'study',
+      label: 'Key Points',
+      text: 'Summarize the most important points from our current topic so I can review them.',
+    },
+    {
+      icon: 'study',
+      label: 'Practice This',
+      text: 'Create a short practice activity about the current topic without giving the answers yet.',
+    },
+  ];
+}
+
 const SUGGESTION_ICONS = new Set([
   'study',
   'career',
@@ -135,6 +241,33 @@ function normalizeSuggestions(rawText) {
       .filter(Boolean)
       .slice(0, 6);
   } catch {
+    const arrayStart = cleaned.indexOf('[');
+    const arrayEnd = cleaned.lastIndexOf(']');
+
+    if (arrayStart >= 0 && arrayEnd > arrayStart) {
+      try {
+        const parsed = JSON.parse(cleaned.slice(arrayStart, arrayEnd + 1));
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((item) => {
+              const label = String(item?.label || '').trim().slice(0, 34);
+              const text = String(item?.text || '').trim().slice(0, 260);
+              const requestedIcon = String(item?.icon || '').trim().toLowerCase();
+              const icon = SUGGESTION_ICONS.has(requestedIcon)
+                ? requestedIcon
+                : 'study';
+
+              if (!label || !text) return null;
+              return { label, text, icon };
+            })
+            .filter(Boolean)
+            .slice(0, 6);
+        }
+      } catch {
+        // Fall through to deterministic context-aware fallback.
+      }
+    }
+
     return [];
   }
 }
@@ -286,12 +419,18 @@ export async function POST(request) {
       ? '\n\n[ASSESSMENT HELP MODE: Do not reveal the final answer, answer choice, missing word, or answer key. Tutor the student with concepts, hints, reasoning steps, and guiding questions only.]'
       : '';
 
+    const feedbackGuidance = buildFeedbackGuidance(history);
+    const feedbackReminder = feedbackGuidance
+      ? `\n\n[RESPONSE FEEDBACK GUIDANCE]\n${feedbackGuidance}`
+      : '';
+
     const userParts = [
       {
         text:
           `${cleanMessage || 'Please analyze the attached material and explain the key points clearly.'}` +
           textAttachmentBlock +
-          assessmentReminder,
+          assessmentReminder +
+          feedbackReminder,
       },
       ...imageAttachments.map(buildImagePart).filter(Boolean),
     ];
@@ -354,7 +493,7 @@ export async function POST(request) {
       );
     }
 
-    const suggestions = await generateFollowUpSuggestions({
+    const generatedSuggestions = await generateFollowUpSuggestions({
       apiKey,
       model,
       history,
@@ -362,6 +501,11 @@ export async function POST(request) {
       assistantResponse: aiResponse,
       assessmentMode,
     });
+
+    const suggestions =
+      generatedSuggestions.length > 0
+        ? generatedSuggestions
+        : buildFallbackSuggestions(assessmentMode);
 
     return Response.json({
       response: aiResponse,
