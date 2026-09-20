@@ -1067,6 +1067,8 @@ export default function Prompt() {
         throw new Error('EduGuide returned an empty response.');
       }
 
+      let regeneratedMessageId = assistantMessage.id || null;
+
       if (user && assistantMessage.id) {
         const headers = await getAuthHeaders(true);
         const updateResponse = await fetch('/api/chat/messages', {
@@ -1083,12 +1085,20 @@ export default function Prompt() {
         if (!updateResponse.ok) {
           throw new Error(updatePayload.error || 'Could not save the regenerated response.');
         }
+      } else if (user && currentSession?.id) {
+        const savedResponse = await saveMessage(currentSession.id, 'assistant', nextText);
+        regeneratedMessageId = savedResponse?.id || null;
       }
 
       setMessages((prev) =>
         prev.map((item, index) =>
           index === assistantIndex
-            ? { ...item, text: nextText, feedback: null }
+            ? {
+                ...item,
+                id: regeneratedMessageId || item.id,
+                text: nextText,
+                feedback: null,
+              }
             : item
         )
       );
@@ -1230,12 +1240,18 @@ export default function Prompt() {
     }`;
 
     if (message.role === 'user') {
+      const userActionClass = `inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-[11px] transition ${
+        isLight
+          ? 'text-white/75 hover:bg-white/15 hover:text-white'
+          : 'text-slate-900/65 hover:bg-slate-950/10 hover:text-slate-950'
+      }`;
+
       return (
         <div className="mt-2 flex items-center justify-end gap-1">
           <button
             type="button"
             onClick={() => copyMessage(messageIndex)}
-            className={actionClass}
+            className={userActionClass}
             title="Copy prompt"
           >
             <CopyIcon className="h-3.5 w-3.5" />
@@ -1245,7 +1261,7 @@ export default function Prompt() {
             type="button"
             onClick={() => deletePromptAt(messageIndex)}
             disabled={messageActionBusy === `delete-${messageIndex}`}
-            className={`${actionClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            className={`${userActionClass} disabled:cursor-not-allowed disabled:opacity-50`}
             title="Delete prompt and its response"
           >
             <TrashIcon className="h-3.5 w-3.5" />
